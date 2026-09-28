@@ -6,12 +6,12 @@ export default function Layout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarStyle: {
+          backgroundColor: "#121212",
+          borderTopColor: "#1E1E1E",
+        },
         tabBarActiveTintColor: "#00B4D8",
         tabBarInactiveTintColor: "#888888",
-        tabBarStyle: {
-          backgroundColor: "#1E1E1E",
-          borderTopWidth: 0,
-        },
       }}
     >
       <Tabs.Screen
@@ -30,6 +30,14 @@ export default function Layout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="search" size={size} color={color} />
           ),
+        }}
+      />
+      {/* Nascosta dalla barra in basso */}
+      <Tabs.Screen
+        name="game/[id]"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
     </Tabs>

@@ -7,73 +7,114 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../services/superbase";
+import { getGameDetails } from "@/services/rawg";
+import {
+  addGameToLibrary,
+  getUserLibrary,
+  removeGameFromLibrary,
+  updateGameStatus,
+} from "@/services/superbase";
 
-interface GameDetailData {
-  id: string;
-  status: "backlog" | "playing" | "completed" | "dropped";
-  rating?: number;
-  notes?: string;
-  games: {
-    id: number;
-    title: string;
-    cover_url: string;
-    release_date: string;
-  };
+const mockUserId = "00000000-0000-0000-0000-000000000000";
+
+type StatusType = "backlog" | "playing" | "completed" | "dropped";
+
+interface GameDetailProps {
+  id?: string | number;
+  gameId?: string | number;
 }
 
-export default function GameDetailScreen() {
-  const { id } = useLocalSearchParams();
+export default function GameDetailScreen(props: GameDetailProps) {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ id: string }>();
 
-  const [item, setItem] = useState<GameDetailData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [rating, setRating] = useState<number>(0);
-  const [notes, setNotes] = useState<string>("");
-  const [saving, setSaving] = useState(false);
+  const rawId = props.gameId || props.id || searchParams.id;
+  const gameId = Array.isArray(rawId) ? rawId[0] : rawId;
+
+  const [game, setGame] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [libraryItem, setLibraryItem] = useState<any>(null);
 
   useEffect(() => {
-    if (id) {
-      fetchGameDetails();
+    console.log("ID RICEVUTO:", gameId, "TIPO:", typeof gameId);
+    if (gameId) {
+      loadGameData();
+    } else {
+      setLoading(false);
     }
-  }, [id]);
+  }, [gameId]);
 
-  const fetchGameDetails = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("user_games")
-      .select("*, games(*)")
-      .eq("id", id)
-      .single();
+  const loadGameData = async () => {
+    try {
+      setLoading(true);
+      const parsedId = typeof gameId === "string" ? parseInt(gameId, 10) : gameId;
 
-    if (error) {
-      console.error("Errore recupero dettaglio:", error.message);
-    } else if (data) {
-      setItem(data as unknown as GameDetailData);
-      setRating(data.rating || 0);
-      setNotes(data.notes || "");
+      if (!parsedId || isNaN(parsedId)) {
+        console.warn("ID non valido o NaN:", gameId);
+        setLoading(false);
+        return;
+      }
+
+      const details = await getGameDetails(parsedId);
+      setGame(details);
+
+      const library = await getUserLibrary(mockUserId);
+      if (Array.isArray(library)) {
+        const existing = library.find(
+          (item: any) =>
+            item.game_id === parsedId ||
+            item.games?.id === parsedId ||
+            item.id === String(parsedId)
+        );
+        setLibraryItem(existing || null);
+      }
+    } catch (error: any) {
+      console.error("Errore recupero dettaglio:", error?.message || error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const handleSave = async () => {
-    if (!item) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from("user_games")
-      .update({ rating, notes })
-      .eq("id", item.id);
+  const handleAddOrUpdate = async (status: StatusType) => {
+    if (!game) return;
 
-    setSaving(false);
-    if (error) {
-      Alert.alert("Errore", "Impossibile salvare i dettagli.");
+    if (libraryItem) {
+      const success = await updateGameStatus(libraryItem.id, status);
+      if (success) {
+        Alert.alert("Aggiornato", `Stato cambiato in ${status.toUpperCase()}`);
+        loadGameData();
+      } else {
+        Alert.alert("Errore", "Impossibile aggiornare lo stato.");
+      }
     } else {
-      Alert.alert("Salvato!", "Valutazione e note aggiornate con successo.");
+      const success = await addGameToLibrary(
+        mockUserId,
+        game.id,
+        game.name,
+        game.background_image,
+        game.released || "",
+        status
+      );
+      if (success) {
+        Alert.alert("Aggiunto", `"${game.name}" aggiunto come ${status.toUpperCase()}`);
+        loadGameData();
+      } else {
+        Alert.alert("Errore", "Impossibile aggiungere il gioco.");
+      }
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!libraryItem) return;
+    const success = await removeGameFromLibrary(libraryItem.id);
+    if (success) {
+      Alert.alert("Rimosso", "Gioco rimosso dal tuo backlog.");
+      setLibraryItem(null);
+    } else {
+      Alert.alert("Errore", "Impossibile rimuovere il gioco.");
     }
   };
 
@@ -85,77 +126,73 @@ export default function GameDetailScreen() {
     );
   }
 
-  if (!item) {
+  if (!game) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={{ color: "#FFF" }}>Gioco non trovato.</Text>
+        <Text style={styles.errorText}>Gioco non trovato.</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backButtonText}>Torna indietro</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  const game = item.games;
-
   return (
-    <ScrollView style={styles.container}>
-      {/* Copertina / Banner */}
-      <View style={styles.imageContainer}>
-        {game.cover_url ? (
-          <Image source={{ uri: game.cover_url }} style={styles.bannerImage} />
-        ) : (
-          <View style={[styles.bannerImage, { backgroundColor: "#333" }]} />
-        )}
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
-        </TouchableOpacity>
-      </View>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {game.background_image ? (
+        <Image source={{ uri: game.background_image }} style={styles.coverImage} />
+      ) : (
+        <View style={[styles.coverImage, styles.placeholder]} />
+      )}
 
-      <View style={styles.content}>
-        <Text style={styles.title}>{game.title}</Text>
-        <Text style={styles.releaseDate}>
-          Data d'uscita: {game.release_date || "N/D"}
-        </Text>
+      <Text style={styles.title}>{game.name}</Text>
 
-        <View style={styles.divider} />
+      {game.released && (
+        <Text style={styles.releaseDate}>Uscita: {game.released}</Text>
+      )}
 
-        {/* Valutazione a Stelle */}
-        <Text style={styles.sectionTitle}>La tua Valutazione</Text>
-        <View style={styles.starsContainer}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <TouchableOpacity key={star} onPress={() => setRating(star)}>
-              <Ionicons
-                name={star <= rating ? "star" : "star-outline"}
-                size={32}
-                color="#FFB703"
-                style={{ marginRight: 8 }}
-              />
-            </TouchableOpacity>
-          ))}
+      {game.description_raw && (
+        <Text style={styles.description}>{game.description_raw}</Text>
+      )}
+
+      <View style={styles.actionsContainer}>
+        <Text style={styles.sectionTitle}>Gestisci nel tuo Backlog:</Text>
+
+        <View style={styles.buttonGrid}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#FFB703" }]}
+            onPress={() => handleAddOrUpdate("playing")}
+          >
+            <Text style={styles.btnText}>In Corso</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#00B4D8" }]}
+            onPress={() => handleAddOrUpdate("backlog")}
+          >
+            <Text style={styles.btnText}>In Backlog</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#38B000" }]}
+            onPress={() => handleAddOrUpdate("completed")}
+          >
+            <Text style={styles.btnText}>Completato</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: "#E63946" }]}
+            onPress={() => handleAddOrUpdate("dropped")}
+          >
+            <Text style={styles.btnText}>Abbandonato</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Note e Recensione */}
-        <Text style={styles.sectionTitle}>Note e Recensione Personale</Text>
-        <TextInput
-          style={styles.notesInput}
-          placeholder="Scrivi qui i tuoi pensieri, ore di gioco, trofei..."
-          placeholderTextColor="#666"
-          multiline
-          numberOfLines={4}
-          value={notes}
-          onChangeText={setNotes}
-        />
-
-        {/* Pulsante Salva */}
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.saveButtonText}>Salva Modifiche</Text>
-          )}
-        </TouchableOpacity>
+        {libraryItem && (
+          <TouchableOpacity style={styles.removeBtn} onPress={handleRemove}>
+            <Text style={styles.removeBtnText}>Elimina dalla Libreria</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </ScrollView>
   );
@@ -166,78 +203,97 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#121212",
   },
+  content: {
+    padding: 16,
+    paddingBottom: 40,
+  },
   centerContainer: {
     flex: 1,
     backgroundColor: "#121212",
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
-  imageContainer: {
-    position: "relative",
+  coverImage: {
     width: "100%",
-    height: 250,
+    height: 220,
+    borderRadius: 12,
+    marginBottom: 16,
   },
-  bannerImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  backButton: {
-    position: "absolute",
-    top: 45,
-    left: 16,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 8,
-    borderRadius: 20,
-  },
-  content: {
-    padding: 16,
+  placeholder: {
+    backgroundColor: "#2A2A2A",
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   releaseDate: {
     fontSize: 14,
     color: "#888888",
     marginBottom: 16,
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#2C2C2C",
-    marginVertical: 16,
+  description: {
+    fontSize: 14,
+    color: "#CCCCCC",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  actionsContainer: {
+    backgroundColor: "#1E1E1E",
+    padding: 16,
+    borderRadius: 12,
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  starsContainer: {
+  buttonGrid: {
     flexDirection: "row",
-    marginBottom: 20,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  notesInput: {
-    backgroundColor: "#1E1E1E",
-    color: "#FFFFFF",
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
-    textAlignVertical: "top",
-    minHeight: 100,
-    marginBottom: 20,
-  },
-  saveButton: {
-    backgroundColor: "#00B4D8",
-    paddingVertical: 14,
-    borderRadius: 10,
+  actionBtn: {
+    width: "48%",
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: "center",
   },
-  saveButtonText: {
+  btnText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  removeBtn: {
+    marginTop: 16,
+    paddingVertical: 12,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#E63946",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  removeBtnText: {
+    color: "#E63946",
+    fontWeight: "bold",
+  },
+  errorText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  backButton: {
+    backgroundColor: "#00B4D8",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: "#FFFFFF",
     fontWeight: "bold",
   },
 });

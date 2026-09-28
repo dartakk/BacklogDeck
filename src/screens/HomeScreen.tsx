@@ -1,21 +1,21 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    getUserLibrary,
-    removeGameFromLibrary,
-    updateGameStatus,
+  getUserLibrary,
+  removeGameFromLibrary,
+  updateGameStatus,
 } from "../services/superbase";
 
 const mockUserId = "00000000-0000-0000-0000-000000000000";
@@ -58,7 +58,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchLibrary();
-    }, []),
+    }, [])
   );
 
   const onRefresh = async () => {
@@ -126,6 +126,7 @@ export default function HomeScreen() {
     if (!game) return null;
 
     const badgeColor = statusColors[item.status] || "#00B4D8";
+    const targetId = String(item.game_id || game.id || item.id);
 
     return (
       <TouchableOpacity
@@ -133,7 +134,7 @@ export default function HomeScreen() {
         onPress={() =>
           router.push({
             pathname: "/game/[id]",
-            params: { id: item.id },
+            params: { id: targetId },
           })
         }
         onLongPress={() => handleGameOptions(item)}
