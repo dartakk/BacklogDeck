@@ -1,21 +1,21 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Image,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import {
-  getUserLibrary,
-  removeGameFromLibrary,
-  updateGameStatus,
+    getUserLibrary,
+    removeGameFromLibrary,
+    updateGameStatus,
 } from "../services/superbase";
 
 const mockUserId = "00000000-0000-0000-0000-000000000000";
@@ -58,7 +58,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchLibrary();
-    }, [])
+    }, []),
   );
 
   const onRefresh = async () => {
@@ -130,7 +130,12 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => router.push(`/game/${item.id}`)}
+        onPress={() =>
+          router.push({
+            pathname: "/game/[id]",
+            params: { id: item.id },
+          })
+        }
         onLongPress={() => handleGameOptions(item)}
       >
         {game.cover_url ? (
