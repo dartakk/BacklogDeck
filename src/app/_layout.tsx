@@ -32,6 +32,42 @@ export default function Layout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profilo",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="scanner"
+        options={{
+          title: "Scanner",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="barcode" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="roulette"
+        options={{
+          title: "Roulette",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="game-controller" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: "Community",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people" size={size} color={color} />
+          ),
+        }}
+      />
       {/* Nascosta dalla barra in basso */}
       <Tabs.Screen
         name="game/[id]"
