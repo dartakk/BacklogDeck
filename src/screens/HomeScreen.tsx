@@ -12,13 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  getUserLibrary,
-  removeGameFromLibrary,
-  updateGameStatus,
-} from "../services/superbase";
-
-const mockUserId = "00000000-0000-0000-0000-000000000000";
+import { Ionicons } from "@expo/vector-icons";
+import { supabase, getUserLibrary, removeGameFromLibrary, updateGameStatus } from "../services/superbase";
 
 type StatusType = "backlog" | "playing" | "completed" | "dropped";
 
@@ -35,10 +30,10 @@ interface LibraryItem {
 }
 
 const statusColors: Record<string, string> = {
-  backlog: "#00B4D8",
-  playing: "#FFB703",
-  completed: "#38B000",
-  dropped: "#E63946",
+  backlog: "#A855F7",
+  playing: "#F59E0B",
+  completed: "#10B981",
+  dropped: "#EF4444",
 };
 
 export default function HomeScreen() {
@@ -50,9 +45,17 @@ export default function HomeScreen() {
 
   const fetchLibrary = async () => {
     setLoading(true);
-    const data = await getUserLibrary(mockUserId);
-    setLibrary(data as unknown as LibraryItem[]);
-    setLoading(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        const data = await getUserLibrary(session.user.id);
+        setLibrary((data as unknown as LibraryItem[]) || []);
+      }
+    } catch (error) {
+      console.error("Errore fetch backlog:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useFocusEffect(
@@ -68,52 +71,24 @@ export default function HomeScreen() {
   };
 
   const handleGameOptions = (item: LibraryItem) => {
-    Alert.alert(item.games.title, "Cosa vuoi fare con questo gioco?", [
-      {
-        text: "In Corso (Playing)",
-        onPress: () => changeStatus(item.id, "playing"),
-      },
-      {
-        text: "Completato",
-        onPress: () => changeStatus(item.id, "completed"),
-      },
-      {
-        text: "In Backlog",
-        onPress: () => changeStatus(item.id, "backlog"),
-      },
-      {
-        text: "Abbandonato",
-        onPress: () => changeStatus(item.id, "dropped"),
-      },
-      {
-        text: "Elimina dalla Libreria",
-        style: "destructive",
-        onPress: () => deleteGame(item.id, item.games.title),
-      },
-      {
-        text: "Annulla",
-        style: "cancel",
-      },
+    Alert.alert(item.games?.title || "Opzioni", "Cosa vuoi fare con questo gioco?", [
+      { text: "In Corso", onPress: () => changeStatus(item.id, "playing") },
+      { text: "Completato", onPress: () => changeStatus(item.id, "completed") },
+      { text: "In Backlog", onPress: () => changeStatus(item.id, "backlog") },
+      { text: "Abbandonato", onPress: () => changeStatus(item.id, "dropped") },
+      { text: "Elimina", style: "destructive", onPress: () => deleteGame(item.id, item.games?.title || "") },
+      { text: "Annulla", style: "cancel" },
     ]);
   };
 
   const changeStatus = async (id: string, newStatus: StatusType) => {
     const success = await updateGameStatus(id, newStatus);
-    if (success) {
-      fetchLibrary();
-    } else {
-      Alert.alert("Errore", "Impossibile aggiornare lo stato.");
-    }
+    if (success) fetchLibrary();
   };
 
   const deleteGame = async (id: string, title: string) => {
     const success = await removeGameFromLibrary(id);
-    if (success) {
-      Alert.alert("Rimosso", `"${title}" è stato rimosso dal backlog.`);
-      fetchLibrary();
-    } else {
-      Alert.alert("Errore", "Impossibile rimuovere il gioco.");
-    }
+    if (success) fetchLibrary();
   };
 
   const filteredLibrary = library.filter((item) => {
@@ -121,89 +96,30 @@ export default function HomeScreen() {
     return item.status === selectedFilter;
   });
 
-  const renderGameItem = ({ item }: { item: LibraryItem }) => {
-    const game = item.games;
-    if (!game) return null;
-
-    const badgeColor = statusColors[item.status] || "#00B4D8";
-    const targetId = String(item.game_id || game.id || item.id);
-
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() =>
-          router.push({
-            pathname: "/game/[id]",
-            params: { id: targetId },
-          })
-        }
-        onLongPress={() => handleGameOptions(item)}
-      >
-        {game.cover_url ? (
-          <Image source={{ uri: game.cover_url }} style={styles.cover} />
-        ) : (
-          <View style={[styles.cover, styles.placeholder]} />
-        )}
-        <View style={styles.infoContainer}>
-          <Text style={styles.title} numberOfLines={2}>
-            {game.title}
-          </Text>
-          <View style={[styles.badge, { backgroundColor: badgeColor + "22" }]}>
-            <Text style={[styles.badgeText, { color: badgeColor }]}>
-              {item.status.toUpperCase()}
-            </Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={styles.moreButton}
-          onPress={() => handleGameOptions(item)}
-        >
-          <Text style={styles.moreIcon}>⋮</Text>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    );
-  };
-
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Il mio Backlog</Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.brandSubtitle}>BACKLOGDECK</Text>
+          <Text style={styles.headerTitle}>Il mio Backlog</Text>
+        </View>
+      </View>
 
-      {/* Bar Filtri con scorrimento orizzontale */}
       <View style={styles.filterWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {[
             { key: "all", label: `Tutti (${library.length})` },
-            {
-              key: "playing",
-              label: `In Corso (${library.filter((i) => i.status === "playing").length})`,
-            },
-            {
-              key: "backlog",
-              label: `Backlog (${library.filter((i) => i.status === "backlog").length})`,
-            },
-            {
-              key: "completed",
-              label: `Completati (${library.filter((i) => i.status === "completed").length})`,
-            },
-            {
-              key: "dropped",
-              label: `Abbandonati (${library.filter((i) => i.status === "dropped").length})`,
-            },
+            { key: "playing", label: `In Corso (${library.filter((i) => i.status === "playing").length})` },
+            { key: "backlog", label: `Backlog (${library.filter((i) => i.status === "backlog").length})` },
+            { key: "completed", label: `Completati (${library.filter((i) => i.status === "completed").length})` },
+            { key: "dropped", label: `Abbandonati (${library.filter((i) => i.status === "dropped").length})` },
           ].map((tab) => (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                styles.filterTab,
-                selectedFilter === tab.key && styles.activeFilterTab,
-              ]}
+              style={[styles.filterTab, selectedFilter === tab.key && styles.activeFilterTab]}
               onPress={() => setSelectedFilter(tab.key)}
             >
-              <Text
-                style={[
-                  styles.filterText,
-                  selectedFilter === tab.key && styles.activeFilterText,
-                ]}
-              >
+              <Text style={[styles.filterText, selectedFilter === tab.key && styles.activeFilterText]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>
@@ -212,32 +128,46 @@ export default function HomeScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator
-          size="large"
-          color="#00B4D8"
-          style={{ marginTop: 40 }}
-        />
+        <ActivityIndicator size="large" color="#A855F7" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={filteredLibrary}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={renderGameItem}
+          renderItem={({ item }) => {
+            const game = item.games;
+            if (!game) return null;
+            const badgeColor = statusColors[item.status] || "#A855F7";
+
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                onPress={() => router.push({ pathname: "/game/[id]", params: { id: String(item.game_id || game.id) } })}
+                onLongPress={() => handleGameOptions(item)}
+              >
+                {game.cover_url ? (
+                  <Image source={{ uri: game.cover_url }} style={styles.cover} />
+                ) : (
+                  <View style={[styles.cover, styles.placeholder]} />
+                )}
+                <View style={styles.infoContainer}>
+                  <Text style={styles.title} numberOfLines={2}>{game.title}</Text>
+                  <View style={[styles.badge, { backgroundColor: badgeColor + "22" }]}>
+                    <Text style={[styles.badgeText, { color: badgeColor }]}>{item.status.toUpperCase()}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity style={styles.moreButton} onPress={() => handleGameOptions(item)}>
+                  <Ionicons name="ellipsis-vertical" size={18} color="#8E8A9F" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            );
+          }}
           contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor="#00B4D8"
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A855F7" />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                Nessun gioco presente in questa categoria.
-              </Text>
-              <Text style={styles.emptySubText}>
-                Usa il tasto Cerca in basso per aggiungere i tuoi giochi!
-              </Text>
+              <Ionicons name="game-controller-outline" size={48} color="#2A233D" />
+              <Text style={styles.emptyText}>Nessun gioco presente in questa categoria.</Text>
+              <Text style={styles.emptySubText}>Usa la tab Cerca in basso per aggiungere i tuoi titoli!</Text>
             </View>
           }
         />
@@ -247,102 +177,25 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#121212",
-    paddingTop: 50,
-    paddingHorizontal: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 12,
-  },
-  filterWrapper: {
-    maxHeight: 40,
-    marginBottom: 16,
-  },
-  filterTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#1E1E1E",
-    marginRight: 8,
-  },
-  activeFilterTab: {
-    backgroundColor: "#00B4D8",
-  },
-  filterText: {
-    color: "#888888",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  activeFilterText: {
-    color: "#FFFFFF",
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  card: {
-    flexDirection: "row",
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    marginBottom: 12,
-    overflow: "hidden",
-    alignItems: "center",
-  },
-  cover: {
-    width: 80,
-    height: 100,
-  },
-  placeholder: {
-    backgroundColor: "#333",
-  },
-  infoContainer: {
-    flex: 1,
-    padding: 12,
-    justifyContent: "space-between",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    marginBottom: 8,
-  },
-  badge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  moreButton: {
-    padding: 16,
-  },
-  moreIcon: {
-    color: "#888888",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  emptyContainer: {
-    alignItems: "center",
-    marginTop: 60,
-    paddingHorizontal: 20,
-  },
-  emptyText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  emptySubText: {
-    color: "#888888",
-    fontSize: 14,
-    textAlign: "center",
-  },
+  container: { flex: 1, backgroundColor: "#0D0B14", paddingTop: 50, paddingHorizontal: 16 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  brandSubtitle: { color: "#A855F7", fontSize: 12, fontWeight: "bold", letterSpacing: 1 },
+  headerTitle: { fontSize: 26, fontWeight: "bold", color: "#F3F0FF" },
+  filterWrapper: { maxHeight: 40, marginBottom: 16 },
+  filterTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: "#171324", marginRight: 8, borderWidth: 1, borderColor: "#2A233D" },
+  activeFilterTab: { backgroundColor: "#A855F7", borderColor: "#A855F7" },
+  filterText: { color: "#8E8A9F", fontSize: 13, fontWeight: "600" },
+  activeFilterText: { color: "#FFFFFF" },
+  listContent: { paddingBottom: 30 },
+  card: { flexDirection: "row", backgroundColor: "#171324", borderRadius: 16, marginBottom: 12, overflow: "hidden", alignItems: "center", borderWidth: 1, borderColor: "#2A233D" },
+  cover: { width: 80, height: 100 },
+  placeholder: { backgroundColor: "#1F192F" },
+  infoContainer: { flex: 1, padding: 12, justifyContent: "space-between" },
+  title: { fontSize: 15, fontWeight: "600", color: "#F3F0FF", marginBottom: 8 },
+  badge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  badgeText: { fontSize: 11, fontWeight: "bold" },
+  moreButton: { padding: 16 },
+  emptyContainer: { alignItems: "center", marginTop: 60, paddingHorizontal: 20 },
+  emptyText: { color: "#F3F0FF", fontSize: 16, fontWeight: "600", textAlign: "center", marginTop: 12, marginBottom: 6 },
+  emptySubText: { color: "#8E8A9F", fontSize: 13, textAlign: "center" },
 });
