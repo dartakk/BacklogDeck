@@ -12,14 +12,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RAWGGame, searchGames } from "../services/rawg";
-import { supabase } from "../services/superbase";
+import { supabase, addGameToUserLibrary, removeGameFromLibrary, getUserLibrary } from "../services/superbase";
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [games, setGames] = useState<RAWGGame[]>([]);
   const [loading, setLoading] = useState(false);
-  const [savedGames, setSavedGames] = useState<(string | number)[]>([]);
+  const [savedGameIds, setSavedGameIds] = useState<number[]>([]);
+  const [libraryEntryMap, setLibraryEntryMap] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchDefaultGames();
@@ -28,18 +29,20 @@ export default function SearchScreen() {
 
   const loadSavedGames = async () => {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from("user_games")
-        .select("game_id")
-        .eq("user_id", user.id);
-
-      if (data && !error) {
-        setSavedGames(data.map((item) => item.game_id));
+      const libraryData = await getUserLibrary(user.id);
+      if (libraryData) {
+        const ids = libraryData.map((item: any) => item.game_id);
+        setSavedGameIds(ids);
+        
+        // Mappa game_id -> library item id (utile per rimuoverlo correttamente)
+        const map: Record<number, string> = {};
+        libraryData.forEach((item: any) => {
+          map[item.game_id] = item.id;
+        });
+        setLibraryEntryMap(map);
       }
     } catch (err) {
       console.error("Errore caricamento giochi salvati:", err);
@@ -49,7 +52,6 @@ export default function SearchScreen() {
   const fetchDefaultGames = async () => {
     setLoading(true);
     try {
-      // Sfruttiamo la funzione searchGames del tuo servizio rawg.ts passando una stringa vuota o un trend
       const results = await searchGames("");
       setGames(results);
     } catch (error) {
@@ -79,36 +81,34 @@ export default function SearchScreen() {
   };
 
   const toggleSaveGame = async (game: RAWGGame) => {
-    const isSaved = savedGames.includes(game.id);
-
-    if (isSaved) {
-      setSavedGames(savedGames.filter((id) => id !== game.id));
-    } else {
-      setSavedGames([...savedGames, game.id]);
-    }
-
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const isSaved = savedGameIds.includes(game.id);
+
       if (isSaved) {
-        await supabase
-          .from("user_games")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("game_id", String(game.id));
+        // Rimuovi dalla libreria usando l'ID della riga in user_library
+        const libraryItemId = libraryEntryMap[game.id];
+        if (libraryItemId) {
+          const success = await removeGameFromLibrary(libraryItemId);
+          if (success) {
+            setSavedGameIds(savedGameIds.filter((id) => id !== game.id));
+            const newMap = { ...libraryEntryMap };
+            delete newMap[game.id];
+            setLibraryEntryMap(newMap);
+          }
+        }
       } else {
-        await supabase.from("user_games").upsert({
-          user_id: user.id,
-          game_id: String(game.id),
-          title: game.name,
-          cover_url: game.background_image,
-          rating: game.metacritic || 0,
-          status: "backlog",
-        });
+        // Aggiungi alla libreria usando la funzione robusta di supabase.ts
+        const result = await addGameToUserLibrary(user.id, game, "backlog");
+        if (result.success && result.data && result.data[0]) {
+          setSavedGameIds([...savedGameIds, game.id]);
+          setLibraryEntryMap({
+            ...libraryEntryMap,
+            [game.id]: result.data[0].id,
+          });
+        }
       }
     } catch (err) {
       console.error("Errore salvataggio Supabase:", err);
@@ -136,20 +136,13 @@ export default function SearchScreen() {
           />
         </View>
 
-        <TouchableOpacity
-          style={styles.searchActionButton}
-          onPress={handleSearch}
-        >
+        <TouchableOpacity style={styles.searchActionButton} onPress={handleSearch}>
           <Text style={styles.searchActionButtonText}>Cerca</Text>
         </TouchableOpacity>
       </View>
 
       {loading && (
-        <ActivityIndicator
-          size="large"
-          color="#A855F7"
-          style={{ marginVertical: 12 }}
-        />
+        <ActivityIndicator size="large" color="#A855F7" style={{ marginVertical: 12 }} />
       )}
 
       <FlatList
@@ -160,21 +153,17 @@ export default function SearchScreen() {
         ListEmptyComponent={
           !loading ? (
             <Text style={styles.emptyText}>
-              {query
-                ? `Nessun gioco trovato per "${query}".`
-                : "Nessun gioco trovato."}
+              {query ? `Nessun gioco trovato per "${query}".` : "Nessun gioco trovato."}
             </Text>
           ) : null
         }
         renderItem={({ item }) => {
-          const isSaved = savedGames.includes(item.id);
+          const isSaved = savedGameIds.includes(item.id);
           return (
             <View style={styles.gameCard}>
               <Image
                 source={{
-                  uri:
-                    item.background_image ||
-                    "https://via.placeholder.com/150x200?text=No+Cover",
+                  uri: item.background_image || "https://via.placeholder.com/150x200?text=No+Cover",
                 }}
                 style={styles.coverImage}
               />
@@ -183,10 +172,7 @@ export default function SearchScreen() {
                   {item.name}
                 </Text>
                 <Text style={styles.gameGenre}>
-                  {item.platforms
-                    ?.map((p) => p.platform.name)
-                    .slice(0, 2)
-                    .join(", ") || "Videogioco"}
+                  {item.platforms?.map((p) => p.platform.name).slice(0, 2).join(", ") || "Videogioco"}
                 </Text>
                 {!!item.metacritic && item.metacritic > 0 && (
                   <View style={styles.ratingContainer}>
@@ -221,139 +207,27 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0D0B14",
-    paddingHorizontal: 16,
-  },
-  header: {
-    marginVertical: 12,
-  },
-  subHeader: {
-    color: "#A855F7",
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    fontWeight: "800",
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 16,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#171324",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#2A233D",
-  },
-  searchInput: {
-    flex: 1,
-    color: "#FFFFFF",
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  searchActionButton: {
-    backgroundColor: "#A855F7",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  searchActionButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-  listContainer: {
-    paddingBottom: 20,
-  },
-  emptyText: {
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 14,
-  },
-  gameCard: {
-    flexDirection: "row",
-    backgroundColor: "#171324",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#2A233D",
-  },
-  coverImage: {
-    width: 60,
-    height: 80,
-    borderRadius: 8,
-    backgroundColor: "#2A233D",
-  },
-  gameInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  gameTitle: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  gameGenre: {
-    color: "#9CA3AF",
-    fontSize: 12,
-    marginBottom: 6,
-  },
-  ratingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  ratingText: {
-    color: "#FBBF24",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  addButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#2A233D",
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 8,
-    borderWidth: 1,
-    borderColor: "#3F335A",
-  },
-  addButtonSaved: {
-    backgroundColor: "#A855F7",
-    borderColor: "#A855F7",
-  },
-  addBtnContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  addBtnText: {
-    color: "#A855F7",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  addBtnTextSaved: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "800",
-  },
+  container: { flex: 1, backgroundColor: "#0D0B14", paddingHorizontal: 16 },
+  header: { marginVertical: 12 },
+  subHeader: { color: "#A855F7", fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  headerTitle: { color: "#FFFFFF", fontSize: 26, fontWeight: "800" },
+  searchContainer: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
+  searchBar: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#171324", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#2A233D" },
+  searchInput: { flex: 1, color: "#FFFFFF", marginLeft: 8, fontSize: 14 },
+  searchActionButton: { backgroundColor: "#A855F7", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, justifyContent: "center", alignItems: "center" },
+  searchActionButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
+  listContainer: { paddingBottom: 20 },
+  emptyText: { color: "#6B7280", textAlign: "center", marginTop: 40, fontSize: 14 },
+  gameCard: { flexDirection: "row", backgroundColor: "#171324", borderRadius: 12, padding: 10, marginBottom: 12, alignItems: "center", borderWidth: 1, borderColor: "#2A233D" },
+  coverImage: { width: 60, height: 80, borderRadius: 8, backgroundColor: "#2A233D" },
+  gameInfo: { flex: 1, marginLeft: 12 },
+  gameTitle: { color: "#FFFFFF", fontSize: 14, fontWeight: "700", marginBottom: 4 },
+  gameGenre: { color: "#9CA3AF", fontSize: 12, marginBottom: 6 },
+  ratingContainer: { flexDirection: "row", alignItems: "center", gap: 4 },
+  ratingText: { color: "#FBBF24", fontSize: 12, fontWeight: "700" },
+  addButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: "#2A233D", justifyContent: "center", alignItems: "center", marginLeft: 8, borderWidth: 1, borderColor: "#3F335A" },
+  addButtonSaved: { backgroundColor: "#A855F7", borderColor: "#A855F7" },
+  addBtnContent: { flexDirection: "row", alignItems: "center", gap: 4 },
+  addBtnText: { color: "#A855F7", fontSize: 11, fontWeight: "800" },
+  addBtnTextSaved: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
 });

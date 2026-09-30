@@ -65,7 +65,21 @@ export const addGameToUserLibrary = async (
   status: "backlog" | "playing" | "completed" | "dropped" = "backlog"
 ) => {
   try {
-    // 1. Verifica e gestione della tabella games (senza upsert)
+    // 0. Assicuriamoci che esista un profilo per questo utente per evitare errori di foreign key
+    const { data: profileCheck } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!profileCheck) {
+      await supabase.from("profiles").insert({
+        id: userId,
+        username: "User_" + userId.slice(0, 6),
+      });
+    }
+
+    // 1. Verifica e gestione della tabella games
     const { data: existingGame } = await supabase
       .from("games")
       .select("id")

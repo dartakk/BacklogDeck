@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { supabase, getUserLibrary, removeGameFromLibrary, updateGameStatus } from "../services/superbase";
 
 type StatusType = "backlog" | "playing" | "completed" | "dropped";
@@ -37,6 +37,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function LibraryScreen() {
+  const router = useRouter();
   const [library, setLibrary] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -70,12 +71,12 @@ export default function LibraryScreen() {
   };
 
   const handleGameOptions = (item: LibraryItem) => {
-    Alert.alert(item.games?.title || "Opzioni", "Cosa vuoi fare con questo gioco?", [
+    Alert.alert(item.games?.title || "Opzioni", "Modifica lo stato del gioco", [
       { text: "In Corso", onPress: () => changeStatus(item.id, "playing") },
       { text: "Completato", onPress: () => changeStatus(item.id, "completed") },
       { text: "In Backlog", onPress: () => changeStatus(item.id, "backlog") },
       { text: "Abbandonato", onPress: () => changeStatus(item.id, "dropped") },
-      { text: "Elimina", style: "destructive", onPress: () => deleteGame(item.id) },
+      { text: "Elimina dalla libreria", style: "destructive", onPress: () => deleteGame(item.id) },
       { text: "Annulla", style: "cancel" },
     ]);
   };
@@ -97,13 +98,22 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.brandSubtitle}>BACKLOGDECK</Text>
-          <Text style={styles.headerTitle}>Il mio Backlog</Text>
+          <Text style={styles.headerTitle}>La mia Libreria</Text>
         </View>
+        <TouchableOpacity 
+          style={styles.searchIconButton}
+          activeOpacity={0.7}
+          onPress={() => router.push("/search")}
+        >
+          <Ionicons name="search" size={20} color="#F3F0FF" />
+        </TouchableOpacity>
       </View>
 
+      {/* Filtri orizzontali stile pillola */}
       <View style={styles.filterWrapper}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {[
@@ -115,6 +125,7 @@ export default function LibraryScreen() {
           ].map((tab) => (
             <TouchableOpacity
               key={tab.key}
+              activeOpacity={0.8}
               style={[styles.filterTab, selectedFilter === tab.key && styles.activeFilterTab]}
               onPress={() => setSelectedFilter(tab.key)}
             >
@@ -126,8 +137,11 @@ export default function LibraryScreen() {
         </ScrollView>
       </View>
 
+      {/* Contenuto Lista */}
       {loading ? (
-        <ActivityIndicator size="large" color="#A855F7" style={{ marginTop: 40 }} />
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color="#A855F7" />
+        </View>
       ) : (
         <FlatList
           data={filteredLibrary}
@@ -140,8 +154,8 @@ export default function LibraryScreen() {
             return (
               <TouchableOpacity
                 style={styles.card}
-                onPress={() => {}}
-                onLongPress={() => handleGameOptions(item)}
+                activeOpacity={0.85}
+                onPress={() => handleGameOptions(item)}
               >
                 {game.cover_url ? (
                   <Image source={{ uri: game.cover_url }} style={styles.cover} />
@@ -150,13 +164,15 @@ export default function LibraryScreen() {
                 )}
                 <View style={styles.infoContainer}>
                   <Text style={styles.title} numberOfLines={2}>{game.title}</Text>
-                  <View style={[styles.badge, { backgroundColor: badgeColor + "22" }]}>
-                    <Text style={[styles.badgeText, { color: badgeColor }]}>{item.status.toUpperCase()}</Text>
+                  <View style={styles.cardFooter}>
+                    <View style={[styles.badge, { backgroundColor: badgeColor + "22", borderColor: badgeColor + "44" }]}>
+                      <Text style={[styles.badgeText, { color: badgeColor }]}>{item.status.toUpperCase()}</Text>
+                    </View>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.moreButton} onPress={() => handleGameOptions(item)}>
-                  <Ionicons name="ellipsis-vertical" size={18} color="#8E8A9F" />
-                </TouchableOpacity>
+                <View style={styles.moreButton}>
+                  <Ionicons name="ellipsis-vertical" size={16} color="#8E8A9F" />
+                </View>
               </TouchableOpacity>
             );
           }}
@@ -164,9 +180,19 @@ export default function LibraryScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A855F7" />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="game-controller-outline" size={48} color="#2A233D" />
-              <Text style={styles.emptyText}>Nessun gioco presente in questa categoria.</Text>
-              <Text style={styles.emptySubText}>Usa la tab Cerca o lo Scanner per aggiungere i tuoi titoli!</Text>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="game-controller-outline" size={36} color="#A855F7" />
+              </View>
+              <Text style={styles.emptyText}>La tua libreria è vuota</Text>
+              <Text style={styles.emptySubText}>Esplora il database o usa lo scanner per aggiungere il tuo primo titolo.</Text>
+              <TouchableOpacity 
+                style={styles.emptyButton}
+                activeOpacity={0.8}
+                onPress={() => router.push("/search")}
+              >
+                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.emptyButtonText}>Aggiungi giochi</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -178,23 +204,33 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0D0B14", paddingTop: 50, paddingHorizontal: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  brandSubtitle: { color: "#A855F7", fontSize: 12, fontWeight: "bold", letterSpacing: 1 },
-  headerTitle: { fontSize: 26, fontWeight: "bold", color: "#F3F0FF" },
-  filterWrapper: { maxHeight: 40, marginBottom: 16 },
-  filterTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: "#171324", marginRight: 8, borderWidth: 1, borderColor: "#2A233D" },
+  brandSubtitle: { color: "#A855F7", fontSize: 11, fontWeight: "700", letterSpacing: 1.5, textTransform: "uppercase" },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#F3F0FF" },
+  searchIconButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#171324", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#2A233D" },
+  
+  filterWrapper: { maxHeight: 42, marginBottom: 16 },
+  filterTab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: "#171324", marginRight: 8, borderWidth: 1, borderColor: "#2A233D", justifyContent: "center" },
   activeFilterTab: { backgroundColor: "#A855F7", borderColor: "#A855F7" },
   filterText: { color: "#8E8A9F", fontSize: 13, fontWeight: "600" },
   activeFilterText: { color: "#FFFFFF" },
-  listContent: { paddingBottom: 30 },
-  card: { flexDirection: "row", backgroundColor: "#171324", borderRadius: 16, marginBottom: 12, overflow: "hidden", alignItems: "center", borderWidth: 1, borderColor: "#2A233D" },
-  cover: { width: 80, height: 100 },
-  placeholder: { backgroundColor: "#1F192F" },
-  infoContainer: { flex: 1, padding: 12, justifyContent: "space-between" },
-  title: { fontSize: 15, fontWeight: "600", color: "#F3F0FF", marginBottom: 8 },
-  badge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  badgeText: { fontSize: 11, fontWeight: "bold" },
-  moreButton: { padding: 16 },
-  emptyContainer: { alignItems: "center", marginTop: 60, paddingHorizontal: 20 },
-  emptyText: { color: "#F3F0FF", fontSize: 16, fontWeight: "600", textAlign: "center", marginTop: 12, marginBottom: 6 },
-  emptySubText: { color: "#8E8A9F", fontSize: 13, textAlign: "center" },
+
+  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  listContent: { paddingBottom: 40, paddingTop: 4 },
+
+  card: { flexDirection: "row", backgroundColor: "#171324", borderRadius: 14, marginBottom: 12, overflow: "hidden", alignItems: "center", borderWidth: 1, borderColor: "#2A233D", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 },
+  cover: { width: 72, height: 96, backgroundColor: "#1F192F" },
+  placeholder: { justifyContent: "center", alignItems: "center" },
+  infoContainer: { flex: 1, padding: 12, justifyContent: "space-between", height: 96 },
+  title: { fontSize: 14, fontWeight: "700", color: "#F3F0FF", lineHeight: 20 },
+  cardFooter: { flexDirection: "row", alignItems: "center" },
+  badge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  badgeText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+  moreButton: { padding: 16, justifyContent: "center", alignItems: "center" },
+
+  emptyContainer: { alignItems: "center", marginTop: 80, paddingHorizontal: 30 },
+  emptyIconContainer: { width: 72, height: 72, borderRadius: 20, backgroundColor: "#171324", justifyContent: "center", alignItems: "center", marginBottom: 16, borderWidth: 1, borderColor: "#2A233D" },
+  emptyText: { color: "#F3F0FF", fontSize: 18, fontWeight: "700", textAlign: "center", marginBottom: 6 },
+  emptySubText: { color: "#8E8A9F", fontSize: 13, textAlign: "center", lineHeight: 18, marginBottom: 20 },
+  emptyButton: { flexDirection: "row", backgroundColor: "#A855F7", paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, alignItems: "center", shadowColor: "#A855F7", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  emptyButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
 });
