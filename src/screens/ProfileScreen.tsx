@@ -1,87 +1,47 @@
+import React, { useEffect, useState } from "react";
 import {
-  Flame,
-  Gamepad2,
-  LogOut,
-  ShieldAlert,
-  Sparkles,
-  Star,
-  Trash2,
-  Trophy,
-} from "lucide-react-native";
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
+import { Flame, Gamepad2, LogOut, ShieldAlert, Sparkles, Trophy } from "lucide-react-native";
 import { getUserProfile, UserProfile } from "../services/profile";
 import { supabase } from "../services/superbase";
 
-interface UserGame {
-  id: string;
-  game_id: string;
-  title: string;
-  cover_url: string;
-  rating: number;
-  status: string;
-}
-
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [savedGames, setSavedGames] = useState<UserGame[]>([]);
+  const [totalGamesCount, setTotalGamesCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProfileAndLibrary();
+    loadProfileData();
   }, []);
 
-  const loadProfileAndLibrary = async () => {
+  const loadProfileData = async () => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session?.user) {
         const userId = sessionData.session.user.id;
 
-        // Carica profilo e rank dinamico
         const userProfile = await getUserProfile(userId);
         setProfile(userProfile);
 
-        // Carica la libreria giochi dell'utente
-        const { data: libraryData, error } = await supabase
+        // Controllo rapido per gli obiettivi basati sui giochi
+        const { count } = await supabase
           .from("user_games")
-          .select("*")
+          .select("*", { count: "exact", head: true })
           .eq("user_id", userId);
 
-        if (libraryData && !error) {
-          setSavedGames(libraryData);
-        }
+        setTotalGamesCount(count || 0);
       }
     } catch (err) {
-      console.error("Errore caricamento dati profilo:", err);
+      console.error("Errore caricamento profilo:", err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const removeGame = async (gameId: string) => {
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session?.user) return;
-
-      const { error } = await supabase
-        .from("user_games")
-        .delete()
-        .eq("user_id", sessionData.session.user.id)
-        .eq("game_id", gameId);
-
-      if (!error) {
-        setSavedGames(savedGames.filter((g) => g.game_id !== gameId));
-      }
-    } catch (err) {
-      console.error("Errore rimozione gioco:", err);
     }
   };
 
@@ -120,15 +80,13 @@ export default function ProfileScreen() {
             <Text style={styles.progressPercent}>{progressValue}%</Text>
           </View>
           <View style={styles.progressBarBg}>
-            <View
-              style={[styles.progressBarFill, { width: `${progressValue}%` }]}
-            />
+            <View style={[styles.progressBarFill, { width: `${progressValue}%` }]} />
           </View>
         </View>
       </View>
 
       {/* Sezione Statistiche Dettagliate */}
-      <Text style={styles.sectionTitle}>Statistiche Libreria</Text>
+      <Text style={styles.sectionTitle}>Statistiche Generali</Text>
       <View style={styles.statsGrid}>
         <View style={styles.statBox}>
           <Gamepad2 size={18} color="#A855F7" />
@@ -161,80 +119,21 @@ export default function ProfileScreen() {
       {/* Sezione Trofei / Obiettivi sbloccabili */}
       <Text style={styles.sectionTitle}>Obiettivi Sbloccati</Text>
       <View style={styles.achievementsRow}>
-        <View style={styles.achievementCard}>
-          <Trophy size={20} color="#FBBF24" />
-          <Text style={styles.achTitle}>Primo Gioco</Text>
+        <View style={[styles.achievementCard, totalGamesCount > 0 && styles.achUnlocked]}>
+          <Trophy size={20} color={totalGamesCount > 0 ? "#FBBF24" : "#4B5563"} />
+          <Text style={[styles.achTitle, totalGamesCount > 0 && { color: "#FFF" }]}>
+            Primo Gioco
+          </Text>
           <Text style={styles.achSub}>Aggiunto al database</Text>
         </View>
-        <View
-          style={[
-            styles.achievementCard,
-            savedGames.length >= 5 && styles.achUnlocked,
-          ]}
-        >
-          <Sparkles
-            size={20}
-            color={savedGames.length >= 5 ? "#A855F7" : "#4B5563"}
-          />
-          <Text
-            style={[
-              styles.achTitle,
-              savedGames.length >= 5 && { color: "#FFF" },
-            ]}
-          >
+        <View style={[styles.achievementCard, totalGamesCount >= 5 && styles.achUnlocked]}>
+          <Sparkles size={20} color={totalGamesCount >= 5 ? "#A855F7" : "#4B5563"} />
+          <Text style={[styles.achTitle, totalGamesCount >= 5 && { color: "#FFF" }]}>
             Collezionista
           </Text>
           <Text style={styles.achSub}>5+ giochi salvati</Text>
         </View>
       </View>
-
-      {/* Sezione Lista Giochi Salvati nella Libreria */}
-      <Text style={styles.sectionTitle}>
-        La mia Libreria ({savedGames.length})
-      </Text>
-      {savedGames.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Gamepad2 size={36} color="#4B5563" />
-          <Text style={styles.emptyText}>
-            La tua libreria è vuota. Cerca un gioco nella sezione esplora per
-            iniziare ad accumularli!
-          </Text>
-        </View>
-      ) : (
-        savedGames.map((item) => (
-          <View key={String(item.game_id)} style={styles.gameCard}>
-            <Image
-              source={{
-                uri:
-                  item.cover_url ||
-                  "https://via.placeholder.com/150x200?text=No+Cover",
-              }}
-              style={styles.coverImage}
-            />
-            <View style={styles.gameInfo}>
-              <Text style={styles.gameTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <Text style={styles.gameStatus}>
-                Stato: <Text style={styles.statusHighlight}>{item.status}</Text>
-              </Text>
-              {!!item.rating && item.rating > 0 && (
-                <View style={styles.ratingContainer}>
-                  <Star size={13} color="#FBBF24" fill="#FBBF24" />
-                  <Text style={styles.ratingText}>{item.rating}</Text>
-                </View>
-              )}
-            </View>
-
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => removeGame(item.game_id)}
-            >
-              <Trash2 size={16} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-        ))
-      )}
 
       {/* Pulsante di Logout */}
       <TouchableOpacity
@@ -383,7 +282,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#2A233D",
     alignItems: "center",
-    opacity: 0.6,
+    opacity: 0.5,
   },
   achUnlocked: {
     opacity: 1,
@@ -396,78 +295,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   achSub: { color: "#6B7280", fontSize: 10, marginTop: 2 },
-  emptyContainer: {
-    width: "100%",
-    backgroundColor: "#171324",
-    padding: 24,
-    borderRadius: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#2A233D",
-    marginBottom: 16,
-  },
-  emptyText: {
-    color: "#6B7280",
-    textAlign: "center",
-    marginTop: 8,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  gameCard: {
-    width: "100%",
-    flexDirection: "row",
-    backgroundColor: "#171324",
-    borderRadius: 14,
-    padding: 10,
-    marginBottom: 10,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#2A233D",
-  },
-  coverImage: {
-    width: 50,
-    height: 70,
-    borderRadius: 8,
-    backgroundColor: "#2A233D",
-  },
-  gameInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  gameTitle: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  gameStatus: {
-    color: "#9CA3AF",
-    fontSize: 11,
-    marginBottom: 4,
-  },
-  statusHighlight: {
-    color: "#A855F7",
-    fontWeight: "700",
-    textTransform: "capitalize",
-  },
-  ratingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  ratingText: {
-    color: "#FBBF24",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  deleteButton: {
-    padding: 10,
-    backgroundColor: "#2A233D",
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    marginLeft: 8,
-  },
   logoutButton: {
     width: "100%",
     flexDirection: "row",

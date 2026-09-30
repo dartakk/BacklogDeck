@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-import { Dices, Newspaper, Search, User, Users } from "lucide-react-native";
+import { Dices, Library, Newspaper, Search, User, Users } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,7 +37,7 @@ export default function Layout() {
           setSession(currentSession);
           setLoading(false);
         }
-      },
+      }
     );
 
     return () => {
@@ -107,6 +107,26 @@ export default function Layout() {
                 ]}
               >
                 Cerca
+              </Text>
+            </View>
+          ),
+        }}
+      />
+      {/* Aggiunta della Tab Libreria */}
+      <Tabs.Screen
+        name="library"
+        options={{
+          title: "Libreria",
+          tabBarIcon: ({ focused }) => (
+            <View style={styles.tabItem}>
+              <Library size={22} color={focused ? "#A855F7" : "#FFFFFF"} />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  { color: focused ? "#A855F7" : "#A3A3A3" },
+                ]}
+              >
+                Libreria
               </Text>
             </View>
           ),

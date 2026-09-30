@@ -1,17 +1,61 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import "react-native-url-polyfill/auto";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { RAWGGame } from "./rawg";
 
 const supabaseUrl = "https://npkzojijhljgnvmopfxz.supabase.co";
 const supabaseAnonKey = "sb_publishable_dw2aXvgzBPPQzLEqJUnjow_N6jHsZpl";
 
+// Memoria di fallback temporanea per l'ambiente SSR del server
+let memoryStorage: Record<string, string> = {};
+
+const SafeStorage = {
+  getItem: (key: string) => {
+    if (Platform.OS === "web") {
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          return Promise.resolve(window.localStorage.getItem(key));
+        }
+      } catch (e) {}
+      return Promise.resolve(memoryStorage[key] || null);
+    }
+    return AsyncStorage.getItem(key);
+  },
+  setItem: (key: string, value: string) => {
+    if (Platform.OS === "web") {
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.setItem(key, value);
+          return Promise.resolve();
+        }
+      } catch (e) {}
+      memoryStorage[key] = value;
+      return Promise.resolve();
+    }
+    return AsyncStorage.setItem(key, value);
+  },
+  removeItem: (key: string) => {
+    if (Platform.OS === "web") {
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.removeItem(key);
+          return Promise.resolve();
+        }
+      } catch (e) {}
+      delete memoryStorage[key];
+      return Promise.resolve();
+    }
+    return AsyncStorage.removeItem(key);
+  },
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: SafeStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: Platform.OS === "web",
   },
 });
 

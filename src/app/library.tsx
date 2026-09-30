@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router";
 import { supabase, getUserLibrary, removeGameFromLibrary, updateGameStatus } from "../services/superbase";
 
 type StatusType = "backlog" | "playing" | "completed" | "dropped";
@@ -36,7 +36,7 @@ const statusColors: Record<string, string> = {
   dropped: "#EF4444",
 };
 
-export default function HomeScreen({ navigation }: any) {
+export default function LibraryScreen() {
   const [library, setLibrary] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -140,9 +140,7 @@ export default function HomeScreen({ navigation }: any) {
             return (
               <TouchableOpacity
                 style={styles.card}
-                onPress={() => {
-                  // Gestisci qui la navigazione al dettaglio se hai una schermata dedicata, es: navigation.navigate('GameDetail', { id: item.game_id })
-                }}
+                onPress={() => {}}
                 onLongPress={() => handleGameOptions(item)}
               >
                 {game.cover_url ? (
@@ -168,7 +166,7 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.emptyContainer}>
               <Ionicons name="game-controller-outline" size={48} color="#2A233D" />
               <Text style={styles.emptyText}>Nessun gioco presente in questa categoria.</Text>
-              <Text style={styles.emptySubText}>Usa la tab Scanner o Cerca per aggiungere i tuoi titoli!</Text>
+              <Text style={styles.emptySubText}>Usa la tab Cerca o lo Scanner per aggiungere i tuoi titoli!</Text>
             </View>
           }
         />

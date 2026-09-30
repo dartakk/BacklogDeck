@@ -1,267 +1,276 @@
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Easing,
-  KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
+  View,
   TextInput,
   TouchableOpacity,
-  View,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
+import * as AuthSession from "expo-auth-session";
 import { supabase } from "../services/superbase";
 
+WebBrowser.maybeCompleteAuthSession();
+
+const { width, height } = Dimensions.get("window");
+
 export default function AuthScreen() {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
-  // Animazioni per il flusso viola e il logo
-  const flowAnim1 = useRef(new Animated.Value(0)).current;
-  const flowAnim2 = useRef(new Animated.Value(0)).current;
+  // Onde digitali fluide sullo sfondo
+  const waveAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // 1. Movimento oscillante fluido per il primo alone viola (Flusso 1)
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(flowAnim1, {
-          toValue: 1,
-          duration: 4000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(flowAnim1, {
-          toValue: 0,
-          duration: 4000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
+      Animated.timing(waveAnim, {
+        toValue: 1,
+        duration: 6000,
+        useNativeDriver: true,
+      })
     ).start();
 
-    // 2. Movimento oscillante opposto per il secondo alone viola (Flusso 2)
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(flowAnim2, {
-          toValue: 1,
-          duration: 5500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(flowAnim2, {
-          toValue: 0,
-          duration: 5500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-
-    // 3. Effetto respiro discreto sull'icona del pad
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 1800,
-          easing: Easing.inOut(Easing.ease),
+          toValue: 1.05,
+          duration: 1200,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 1800,
-          easing: Easing.inOut(Easing.ease),
+          duration: 1200,
           useNativeDriver: true,
         }),
-      ]),
+      ])
     ).start();
-  }, [flowAnim1, flowAnim2, pulseAnim]);
+  }, []);
 
-  // Trasformazioni di traslazione e opacità per simulare il flusso fluido
-  const translateY1 = flowAnim1.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-30, 40],
-  });
-  const translateX1 = flowAnim1.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-20, 30],
-  });
-
-  const translateY2 = flowAnim2.interpolate({
-    inputRange: [0, 1],
-    outputRange: [30, -40],
-  });
-  const translateX2 = flowAnim2.interpolate({
-    inputRange: [0, 1],
-    outputRange: [20, -30],
-  });
-
-  const handleAuth = async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert(
-        "Attenzione",
-        "Inserisci sia l'email che la password per proseguire.",
-      );
+  const handleAuthEmail = async () => {
+    if (!email || !password) {
+      Alert.alert("Attenzione", "Inserisci email e password.");
       return;
     }
 
     setLoading(true);
-    try {
-      if (isSignUp) {
-        // REGISTRAZIONE UTENTE
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password: password.trim(),
-        });
-
-        if (error) {
-          Alert.alert("Errore Registrazione", error.message);
-        } else if (data.user && data.session) {
-          Alert.alert("Registrazione Completata!", "Benvenuto su BacklogDeck!");
-        } else {
-          Alert.alert(
-            "Registrazione completata!",
-            "Se la conferma email è attiva su Supabase, controlla la tua casella di posta, altrimenti prova ad accedere.",
-          );
-        }
+    if (isLogin) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) Alert.alert("Errore Accesso", error.message);
+    } else {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        Alert.alert("Errore Registrazione", error.message);
       } else {
-        // ACCESSO UTENTE
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: password.trim(),
-        });
+        Alert.alert("Registrazione completata", "Controlla la tua email per confermare l'account.");
+      }
+    }
+    setLoading(false);
+  };
 
-        if (error) {
-          Alert.alert("Errore di Accesso", error.message);
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+
+      // Se siamo su Web, usiamo direttamente l'origine corrente (es. http://localhost:8081)
+      const redirectTo =
+        Platform.OS === "web"
+          ? window.location.origin
+          : AuthSession.makeRedirectUri({
+              scheme: "backlogdeck",
+              path: "auth/callback",
+            });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: Platform.OS === "web" ? false : true,
+        },
+      });
+
+      if (error) throw error;
+
+      // Gestione specifica per mobile con WebBrowser
+      if (Platform.OS !== "web" && data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        
+        if (result.type === "success" && result.url) {
+          const urlParams = new URLSearchParams(
+            result.url.includes("#") ? result.url.split("#")[1] : result.url.split("?")[1]
+          );
+          const accessToken = urlParams.get("access_token");
+          const refreshToken = urlParams.get("refresh_token");
+
+          if (accessToken && refreshToken) {
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+          }
         }
       }
-    } catch (err: any) {
-      Alert.alert(
-        "Errore imprevisto",
-        err.message || "Si è verificato un errore.",
-      );
+    } catch (error: any) {
+      Alert.alert("Errore Google", error.message || "Impossibile completare l'accesso con Google.");
     } finally {
       setLoading(false);
     }
   };
+
+  const translateXWave = waveAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width, width],
+  });
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      {/* FLUSSO VIOLA ANIMATO 1 (Alto Sinistra) */}
-      <Animated.View
-        style={[
-          styles.purpleGlow1,
-          {
-            transform: [
-              { translateY: translateY1 },
-              { translateX: translateX1 },
-            ],
-          },
-        ]}
-      />
+      <LinearGradient colors={["#020205", "#0A0612", "#020205"]} style={styles.backgroundGradient}>
+        
+        {/* Linee di flusso stile live stream */}
+        <Animated.View
+          style={[
+            styles.waveLineTop,
+            { transform: [{ translateX: translateXWave }] },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.waveLineBottom,
+            { transform: [{ translateX: Animated.multiply(translateXWave, -1) }] },
+          ]}
+        />
 
-      {/* FLUSSO VIOLA ANIMATO 2 (Basso Destra) */}
-      <Animated.View
-        style={[
-          styles.purpleGlow2,
-          {
-            transform: [
-              { translateY: translateY2 },
-              { translateX: translateX2 },
-            ],
-          },
-        ]}
-      />
-
-      <View style={styles.card}>
-        <View style={styles.header}>
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <Ionicons name="game-controller" size={52} color="#A855F7" />
+        <View style={styles.contentContainer}>
+          
+          {/* Logo Geometrico Tagliente */}
+          <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
+            <View style={styles.logoOuterFrame}>
+              <LinearGradient
+                colors={["#A855F7", "#581C87"]}
+                style={styles.logoInnerCore}
+              >
+                <Ionicons name="game-controller" size={32} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.logoGlowBar} />
           </Animated.View>
-          <Text style={styles.title}>BacklogDeck</Text>
-          <Text style={styles.subtitle}>
-            {isSignUp ? "Crea il tuo Profilo Gamer" : "Accedi al tuo Backlog"}
-          </Text>
-        </View>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Ionicons
-              name="mail-outline"
-              size={20}
-              color="#8E8A9F"
-              style={styles.icon}
-            />
+          <Text style={styles.appName}>
+            BACKLOG<Text style={styles.appNameAccent}>DECK</Text>
+          </Text>
+
+          {/* Card Principale Tagliente */}
+          <View style={styles.formCard}>
+            
+            <View style={styles.cardHeader}>
+              <View style={styles.headerSlash} />
+              <Text style={styles.cardTitle}>
+                {isLogin ? "ACCEDI AL TUO ACCOUNT" : "REGISTRA NUOVO ACCOUNT"}
+              </Text>
+              <View style={styles.headerSlash} />
+            </View>
+
             <TextInput
               style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#8E8A9F"
+              placeholder="Indirizzo Email"
+              placeholderTextColor="#4B5563"
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
             />
-          </View>
 
-          <View style={styles.inputContainer}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={20}
-              color="#8E8A9F"
-              style={styles.icon}
-            />
             <TextInput
               style={styles.input}
               placeholder="Password"
-              placeholderTextColor="#8E8A9F"
+              placeholderTextColor="#4B5563"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
             />
-          </View>
 
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={handleAuth}
-            disabled={loading}
-          >
-            <LinearGradient
-              colors={["#A855F7", "#6D28D9"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.button}
+            <View style={styles.settingsRow}>
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() => setRememberMe(!rememberMe)}
+                activeOpacity={0.9}
+              >
+                <View style={[styles.checkboxBox, rememberMe && styles.checkboxActive]} />
+                <Text style={styles.checkboxLabel}>Ricordami</Text>
+              </TouchableOpacity>
+              <TouchableOpacity>
+                <Text style={styles.forgotText}>Password dimenticata?</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={handleAuthEmail}
+              disabled={loading}
+              activeOpacity={0.8}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.buttonText}>
-                  {isSignUp ? "Registrati Subito" : "Accedi"}
-                </Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+              <LinearGradient
+                colors={["#9333EA", "#6B21A8"]}
+                style={styles.buttonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>
+                    {isLogin ? "Accedi" : "Registrati"}
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.switchBtn}
-            onPress={() => setIsSignUp(!isSignUp)}
-          >
-            <Text style={styles.switchText}>
-              {isSignUp
-                ? "Hai già un account? Accedi"
-                : "Non hai un account? Registrati qui"}
-            </Text>
-          </TouchableOpacity>
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>oppure</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Pulsante Google */}
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="logo-google" size={16} color="#E2E8F0" style={{ marginRight: 10 }} />
+              <Text style={styles.googleButtonText}>Continua con Google</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setIsLogin(!isLogin)}
+              style={styles.switchButton}
+            >
+              <Text style={styles.switchText}>
+                {isLogin ? "Non hai un account? " : "Hai già un account? "}
+                <Text style={styles.switchTextBold}>
+                  {isLogin ? "Registrati" : "Accedi"}
+                </Text>
+              </Text>
+            </TouchableOpacity>
+
+          </View>
         </View>
-      </View>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }
@@ -269,108 +278,221 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0D0B14",
-    justifyContent: "center",
-    paddingHorizontal: 24,
+    backgroundColor: "#020205",
   },
-  purpleGlow1: {
+  backgroundGradient: {
+    flex: 1,
+    width: width,
+    height: height,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  waveLineTop: {
     position: "absolute",
-    top: "15%",
-    left: "10%",
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "#8B5CF6",
-    opacity: 0.35,
+    top: 80,
+    width: width * 2,
+    height: 1,
+    backgroundColor: "rgba(168, 85, 247, 0.25)",
     shadowColor: "#A855F7",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 60,
-    elevation: 20,
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
   },
-  purpleGlow2: {
+  waveLineBottom: {
     position: "absolute",
-    bottom: "15%",
-    right: "10%",
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "#6D28D9",
-    opacity: 0.3,
-    shadowColor: "#7C3AED",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 70,
-    elevation: 20,
+    bottom: 80,
+    width: width * 2,
+    height: 1,
+    backgroundColor: "rgba(168, 85, 247, 0.2)",
   },
-  card: {
-    backgroundColor: "#171324",
-    borderRadius: 24,
-    padding: 26,
-    borderWidth: 1,
-    borderColor: "#2A233D",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  header: {
+  contentContainer: {
+    width: "92%",
+    maxWidth: 420,
     alignItems: "center",
-    marginBottom: 28,
+    zIndex: 2,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    color: "#F3F0FF",
-    marginTop: 10,
-    letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#8E8A9F",
-    marginTop: 4,
-  },
-  form: {
-    gap: 16,
-  },
-  inputContainer: {
-    flexDirection: "row",
+  logoContainer: {
     alignItems: "center",
-    backgroundColor: "#1F192F",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#2A233D",
-    paddingHorizontal: 14,
-    height: 52,
+    marginBottom: 12,
   },
-  icon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    color: "#F3F0FF",
-    fontSize: 15,
-  },
-  button: {
-    height: 52,
-    borderRadius: 14,
+  logoOuterFrame: {
+    width: 68,
+    height: 68,
+    transform: [{ rotate: "45deg" }],
+    backgroundColor: "#171026",
+    borderWidth: 1.5,
+    borderColor: "#C084FC",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 8,
+    shadowColor: "#A855F7",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  buttonText: {
-    color: "#FFF",
-    fontSize: 16,
+  logoInnerCore: {
+    width: 50,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    transform: [{ rotate: "-45deg" }],
+  },
+  logoGlowBar: {
+    width: 50,
+    height: 2,
+    backgroundColor: "#C084FC",
+    marginTop: 16,
+    shadowColor: "#C084FC",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+  },
+  appName: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 3.5,
+    marginBottom: 28,
+  },
+  appNameAccent: {
+    color: "#C084FC",
+  },
+  formCard: {
+    width: "100%",
+    backgroundColor: "#07050D",
+    borderRadius: 4,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "rgba(168, 85, 247, 0.4)",
+    shadowColor: "#581C87",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+  },
+  headerSlash: {
+    width: 12,
+    height: 2,
+    backgroundColor: "#C084FC",
+    marginHorizontal: 8,
+  },
+  cardTitle: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#E2E8F0",
+    letterSpacing: 1.5,
+  },
+  input: {
+    width: "100%",
+    height: 46,
+    backgroundColor: "#030206",
+    borderRadius: 2,
+    paddingHorizontal: 14,
+    color: "#F1F5F9",
+    fontSize: 13,
+    borderWidth: 1,
+    borderColor: "rgba(168, 85, 247, 0.25)",
+    marginBottom: 12,
+  },
+  settingsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    marginTop: 2,
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  checkboxBox: {
+    width: 14,
+    height: 14,
+    borderWidth: 1,
+    borderColor: "#A855F7",
+    backgroundColor: "#030206",
+    marginRight: 8,
+    borderRadius: 1,
+  },
+  checkboxActive: {
+    backgroundColor: "#A855F7",
+  },
+  checkboxLabel: {
+    color: "#9CA3AF",
+    fontSize: 11,
+  },
+  forgotText: {
+    color: "#C084FC",
+    fontSize: 11,
     fontWeight: "600",
   },
-  switchBtn: {
+  primaryButton: {
+    width: "100%",
+    height: 46,
+    borderRadius: 2,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#C084FC",
+  },
+  buttonGradient: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 12,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(168, 85, 247, 0.2)",
+  },
+  dividerText: {
+    color: "#4B5563",
+    paddingHorizontal: 8,
+    fontSize: 11,
+  },
+  googleButton: {
+    width: "100%",
+    height: 46,
+    backgroundColor: "#0B0714",
+    borderRadius: 2,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(168, 85, 247, 0.35)",
+  },
+  googleButtonText: {
+    color: "#E2E8F0",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  switchButton: {
+    marginTop: 16,
+    alignItems: "center",
   },
   switchText: {
-    color: "#A855F7",
-    fontSize: 14,
-    fontWeight: "500",
+    color: "#6B7280",
+    fontSize: 11,
+  },
+  switchTextBold: {
+    color: "#C084FC",
+    fontWeight: "900",
   },
 });
