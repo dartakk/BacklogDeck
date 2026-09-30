@@ -9,7 +9,6 @@ import { supabase } from "../services/superbase";
 import AuthScreen from "../screens/AuthScreen";
 import CommunityScreen from "../screens/CommunityScreen";
 import HomeScreen from "../screens/HomeScreen";
-import LibraryScreen from "../screens/LibraryScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import RouletteScreen from "../screens/RouletteScreen";
 import ScannerScreen from "../screens/ScannerScreen";
@@ -93,7 +92,6 @@ export default function AppNavigator() {
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Libreria" component={LibraryScreen} />
         <Tab.Screen name="Scanner" component={ScannerScreen} />
         <Tab.Screen name="Roulette" component={RouletteScreen} />
         <Tab.Screen name="Community" component={CommunityScreen} />
