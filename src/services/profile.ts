@@ -6,6 +6,10 @@ export interface UserProfile {
   avatar_url: string;
   bio: string;
   rankTitle: string;
+  level: number;
+  progress: number;
+  nextRankTitle: string | null;
+  reviewCount: number;
   stats: {
     total: number;
     backlog: number;
@@ -15,12 +19,27 @@ export interface UserProfile {
   };
 }
 
-export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
+const BACKLOG_LEVELS = [
+  { title: "Nuovo esploratore", minimum: 0 },
+  { title: "Cacciatore di mondi", minimum: 5 },
+  { title: "Collezionista", minimum: 15 },
+  { title: "Veterano del backlog", minimum: 30 },
+  { title: "Leggenda", minimum: 60 },
+];
+
+export const getUserProfile = async (
+  userId: string,
+): Promise<UserProfile | null> => {
   try {
-    // 1. Recupera i dati base dalla tabella profiles (se esiste) o usa l'utente auth
     const { data: authUser } = await supabase.auth.getUser();
-    
-    // 2. Recupera la libreria dell'utente per calcolare le statistiche e il rank
+    const { data: storedProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("username, avatar_url, bio")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+
     const { data: library, error } = await supabase
       .from("user_library")
       .select("status")
@@ -32,32 +51,113 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
       total: library?.length || 0,
       backlog: library?.filter((item) => item.status === "backlog").length || 0,
       playing: library?.filter((item) => item.status === "playing").length || 0,
-      completed: library?.filter((item) => item.status === "completed").length || 0,
+      completed:
+        library?.filter((item) => item.status === "completed").length || 0,
       dropped: library?.filter((item) => item.status === "dropped").length || 0,
     };
 
-    // 3. Logica per il Rank da "Accumulatore Seriale" / "Spendaccione"
-    let rankTitle = "🎮 Videogiocatore Casual";
-    if (stats.backlog > 15 && stats.backlog > stats.completed * 2) {
-      rankTitle = "📦 Accumulatore Seriale di Backlog";
-    } else if (stats.backlog > 30) {
-      rankTitle = "💸 Spendaccione Cronico (Mai Giocati)";
-    } else if (stats.completed > 10) {
-      rankTitle = "🏆 Cacciatore di Titoli Completati";
-    } else if (stats.playing > 0) {
-      rankTitle = "⚡ Giocatore in Trincea";
+    const { count: reviewCount, error: reviewError } = await supabase
+      .from("reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    if (reviewError) throw reviewError;
+
+    let levelIndex = 0;
+    for (let index = 1; index < BACKLOG_LEVELS.length; index += 1) {
+      if (stats.backlog >= BACKLOG_LEVELS[index].minimum) levelIndex = index;
     }
+
+    const currentLevel = BACKLOG_LEVELS[levelIndex];
+    const nextLevel = BACKLOG_LEVELS[levelIndex + 1] ?? null;
+    const progress = nextLevel
+      ? Math.floor(
+          ((stats.backlog - currentLevel.minimum) /
+            (nextLevel.minimum - currentLevel.minimum)) *
+            100,
+        )
+      : 100;
 
     return {
       id: userId,
-      username: authUser.user?.email?.split("@")[0] || "Gamer",
-      avatar_url: authUser.user?.user_metadata?.avatar_url || "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=300",
-      bio: "Collezionista di mondi digitali e cacciatore di sconti su Steam.",
-      rankTitle,
+      username:
+        storedProfile?.username ||
+        authUser.user?.email?.split("@")[0] ||
+        "Gamer",
+      avatar_url:
+        storedProfile?.avatar_url ||
+        authUser.user?.user_metadata?.avatar_url ||
+        "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=300",
+      bio:
+        storedProfile?.bio ||
+        "Collezionista di mondi digitali e cacciatore di sconti su Steam.",
+      rankTitle: currentLevel.title,
+      level: levelIndex + 1,
+      progress,
+      nextRankTitle: nextLevel?.title ?? null,
+      reviewCount: reviewCount ?? 0,
       stats,
     };
   } catch (err) {
     console.error("Errore recupero profilo:", err);
     return null;
   }
+};
+
+export const uploadProfileAvatar = async (
+  userId: string,
+  imageUri: string,
+  mimeType?: string | null,
+) => {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  if (!authData.user || authData.user.id !== userId) {
+    throw new Error("Non puoi modificare l'immagine di un altro profilo.");
+  }
+
+  const contentType = mimeType || "image/jpeg";
+  if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+    throw new Error("Sono supportate immagini JPEG, PNG o WebP.");
+  }
+
+  const imageResponse = await fetch(imageUri);
+  if (!imageResponse.ok)
+    throw new Error("Impossibile leggere l'immagine selezionata.");
+  const imageData = await imageResponse.arrayBuffer();
+  if (imageData.byteLength > 2 * 1024 * 1024) {
+    throw new Error("L'immagine deve essere inferiore a 2 MB.");
+  }
+
+  const { data: storedProfile, error: profileError } = await supabase
+    .from("profiles")
+    .select("username, bio")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) throw profileError;
+
+  const { error: uploadError } = await supabase.storage
+    .from("avatars")
+    .upload(`${userId}/avatar`, imageData, { contentType, upsert: true });
+  if (uploadError) throw uploadError;
+
+  const { data: publicUrl } = supabase.storage
+    .from("avatars")
+    .getPublicUrl(`${userId}/avatar`);
+  const avatarUrl = `${publicUrl.publicUrl}?updated=${Date.now()}`;
+
+  const { error: updateError } = await supabase.from("profiles").upsert(
+    {
+      id: userId,
+      username:
+        storedProfile?.username ||
+        authData.user.email?.split("@")[0] ||
+        "Gamer",
+      bio: storedProfile?.bio || "",
+      avatar_url: avatarUrl,
+    },
+    { onConflict: "id" },
+  );
+  if (updateError) throw updateError;
+
+  return avatarUrl;
 };

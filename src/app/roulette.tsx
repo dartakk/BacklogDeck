@@ -1,86 +1,125 @@
-import React, { useState, useEffect } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-  Dimensions,
-  Animated,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../services/superbase";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import AnimatedBackdrop from "../components/AnimatedBackdrop";
+import { getUserLibrary, supabase } from "../services/superbase";
 
 const { width } = Dimensions.get("window");
 
 interface GameItem {
-  id: string;
+  id: number;
   title: string;
   cover_url: string;
+  genres: string[];
+  status: string;
+  session_minutes: number | null;
 }
 
+const MOOD_GENRES: Record<string, string[]> = {
+  relax: ["casual", "puzzle", "simulation", "indie", "family"],
+  story: ["adventure", "rpg", "role-playing", "narrative"],
+  energy: ["action", "shooter", "racing", "sports", "fighting"],
+  strategy: ["strategy", "tactical", "turn-based", "management"],
+};
+
 export default function RouletteScreen() {
-  const [backlogGames, setBacklogGames] = useState<GameItem[]>([]);
+  const [libraryGames, setLibraryGames] = useState<GameItem[]>([]);
   const [selectedGame, setSelectedGame] = useState<GameItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [spinning, setSpinning] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState("backlog");
+  const [selectedMood, setSelectedMood] = useState("any");
+  const [timeLimit, setTimeLimit] = useState<number | null>(null);
   const spinAnim = useState(new Animated.Value(0))[0];
 
-  useEffect(() => {
-    fetchBacklog();
-  }, []);
-
-  const fetchBacklog = async () => {
+  const fetchBacklog = useCallback(async () => {
     try {
       setLoading(true);
-      console.log("Recupero giochi dal database...");
-
       const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData?.session?.user?.id;
-
-      // Query sicura senza la colonna genres
-      let query = supabase.from("user_library").select(`
-          status,
-          games:game_id (
-            id,
-            title,
-            cover_url
-          )
-        `);
-
-      if (userId) {
-        query = query.eq("user_id", userId);
+      const userId = sessionData.session?.user.id;
+      if (!userId) {
+        setLibraryGames([]);
+        setSelectedGame(null);
+        return;
       }
 
-      const { data, error } = await query;
+      const library = await getUserLibrary(userId);
+      const gamesList = library.flatMap((entry: any) =>
+        entry.games
+          ? [
+              {
+                id: entry.game_id,
+                title: entry.games.title,
+                cover_url: entry.games.cover_url,
+                genres: entry.games.genres ?? [],
+                status: entry.status,
+                session_minutes: entry.session_minutes ?? null,
+              },
+            ]
+          : [],
+      );
 
-      if (error) {
-        console.error("Errore Supabase:", error);
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        const gamesList = data
-          .map((item: any) => item.games)
-          .filter((g: any) => g !== null && g !== undefined);
-
-        setBacklogGames(gamesList);
-        if (gamesList.length > 0) {
-          setSelectedGame(gamesList[0]);
-        }
-      } else {
-        setBacklogGames([]);
-      }
+      setLibraryGames(gamesList);
+      setSelectedGame(
+        gamesList.find((game) => game.status === "backlog") ??
+          gamesList[0] ??
+          null,
+      );
     } catch (err) {
       console.error("Errore critico in fetchBacklog:", err);
+      setLibraryGames([]);
+      setSelectedGame(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchBacklog();
+    }, [fetchBacklog]),
+  );
+
+  const filteredGames = libraryGames.filter((game) => {
+    if (selectedStatus !== "all" && game.status !== selectedStatus)
+      return false;
+    if (
+      timeLimit !== null &&
+      (!game.session_minutes || game.session_minutes > timeLimit)
+    ) {
+      return false;
+    }
+    if (selectedMood !== "any") {
+      const targetGenres = MOOD_GENRES[selectedMood] ?? [];
+      if (
+        !game.genres.some((genre) =>
+          targetGenres.some((target) => genre.toLowerCase().includes(target)),
+        )
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const displayGame =
+    filteredGames.find((game) => game.id === selectedGame?.id) ??
+    filteredGames[0] ??
+    null;
 
   const spinRoulette = () => {
-    if (backlogGames.length === 0) return;
+    if (filteredGames.length === 0) return;
 
     setSpinning(true);
 
@@ -96,8 +135,8 @@ export default function RouletteScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      const randomIndex = Math.floor(Math.random() * backlogGames.length);
-      setSelectedGame(backlogGames[randomIndex]);
+      const randomIndex = Math.floor(Math.random() * filteredGames.length);
+      setSelectedGame(filteredGames[randomIndex]);
       setSpinning(false);
     });
   };
@@ -117,19 +156,131 @@ export default function RouletteScreen() {
 
   return (
     <View style={styles.container}>
+      <AnimatedBackdrop />
       <View style={styles.header}>
-        <Ionicons name="game-controller" size={28} color="#00B4D8" />
-        <Text style={styles.headerTitle}>Backlog Roulette</Text>
-        <Text style={styles.subtitle}>Non sai cosa giocare? Fai girare la ruota!</Text>
+        <Ionicons name="game-controller" size={28} color="#C084FC" />
+        <Text style={styles.headerTitle}>Roulette</Text>
+        <Text style={styles.subtitle}>
+          Scegli il prossimo gioco in base al tuo momento.
+        </Text>
       </View>
 
-      {backlogGames.length === 0 ? (
+      {libraryGames.length > 0 && (
+        <View style={styles.filters}>
+          <Text style={styles.filterLabel}>STATO</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[
+              { key: "backlog", label: "Backlog" },
+              { key: "playing", label: "In corso" },
+              { key: "all", label: "Tutta la libreria" },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.filterChip,
+                  selectedStatus === option.key && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedStatus(option.key)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedStatus === option.key &&
+                      styles.filterChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <Text style={styles.filterLabel}>UMORE</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[
+              { key: "any", label: "Qualsiasi" },
+              { key: "relax", label: "Relax" },
+              { key: "story", label: "Storia" },
+              { key: "energy", label: "Energia" },
+              { key: "strategy", label: "Strategia" },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.filterChip,
+                  selectedMood === option.key && styles.filterChipActive,
+                ]}
+                onPress={() => setSelectedMood(option.key)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    selectedMood === option.key && styles.filterChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <Text style={styles.filterLabel}>TEMPO MASSIMO</Text>
+          <View style={styles.timeOptions}>
+            {[
+              { value: null, label: "Qualsiasi" },
+              { value: 30, label: "30 min" },
+              { value: 60, label: "1 ora" },
+              { value: 120, label: "2 ore" },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.label}
+                style={[
+                  styles.filterChip,
+                  timeLimit === option.value && styles.filterChipActive,
+                ]}
+                onPress={() => setTimeLimit(option.value)}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    timeLimit === option.value && styles.filterChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {libraryGames.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="albums-outline" size={64} color="#555" />
           <Text style={styles.emptyTitle}>Il tuo backlog è vuoto!</Text>
           <Text style={styles.emptySubtitle}>
             Aggiungi qualche gioco dalla ricerca per far girare la roulette.
           </Text>
+        </View>
+      ) : filteredGames.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="options-outline" size={48} color="#A855F7" />
+          <Text style={styles.emptyTitle}>
+            Nessun gioco corrisponde ai filtri
+          </Text>
+          <Text style={styles.emptySubtitle}>
+            Imposta una durata nei dettagli dei giochi o scegli altri filtri.
+          </Text>
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={() => {
+              setSelectedStatus("backlog");
+              setSelectedMood("any");
+              setTimeLimit(null);
+            }}
+          >
+            <Text style={styles.resetButtonText}>Azzera filtri</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.content}>
@@ -139,9 +290,9 @@ export default function RouletteScreen() {
               { transform: [{ rotate: spinInterpolate }] },
             ]}
           >
-            {selectedGame?.cover_url ? (
+            {displayGame?.cover_url ? (
               <Image
-                source={{ uri: selectedGame.cover_url }}
+                source={{ uri: displayGame.cover_url }}
                 style={styles.coverImage}
               />
             ) : (
@@ -151,8 +302,13 @@ export default function RouletteScreen() {
             )}
             <View style={styles.gameInfo}>
               <Text style={styles.gameTitle} numberOfLines={2}>
-                {selectedGame?.title || "Seleziona un gioco"}
+                {displayGame?.title || "Seleziona un gioco"}
               </Text>
+              {!!displayGame?.session_minutes && (
+                <Text style={styles.gameDuration}>
+                  Sessione stimata · {displayGame.session_minutes} min
+                </Text>
+              )}
             </View>
           </Animated.View>
 
@@ -161,9 +317,16 @@ export default function RouletteScreen() {
             onPress={spinRoulette}
             disabled={spinning}
           >
-            <Ionicons name="shuffle" size={22} color="#fff" style={{ marginRight: 8 }} />
+            <Ionicons
+              name="shuffle"
+              size={22}
+              color="#fff"
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.spinButtonText}>
-              {spinning ? "Estrazione in corso..." : "Estrai il prossimo gioco!"}
+              {spinning
+                ? "Estrazione in corso..."
+                : "Estrai il prossimo gioco!"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -262,6 +425,36 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
   },
+  filters: { marginBottom: 12 },
+  filterLabel: {
+    color: "#9D93AF",
+    fontSize: 10,
+    fontWeight: "800",
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  filterChip: {
+    backgroundColor: "#171324",
+    borderColor: "#352B46",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+  },
+  filterChipActive: { backgroundColor: "#6D28D9", borderColor: "#A855F7" },
+  filterChipText: { color: "#C8C2E0", fontSize: 12, fontWeight: "600" },
+  filterChipTextActive: { color: "#FFFFFF" },
+  timeOptions: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  gameDuration: { color: "#C084FC", fontSize: 12, marginTop: 8 },
+  resetButton: {
+    backgroundColor: "#6D28D9",
+    borderRadius: 8,
+    marginTop: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  resetButtonText: { color: "#FFFFFF", fontWeight: "700" },
   spinButton: {
     flexDirection: "row",
     backgroundColor: "#00B4D8",

@@ -1,21 +1,21 @@
-import React, { useEffect, useRef, useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  TextInput,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import * as WebBrowser from "expo-web-browser";
 import * as AuthSession from "expo-auth-session";
+import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
+import { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 import { supabase } from "../services/superbase";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -30,19 +30,19 @@ export default function AuthScreen() {
   const [rememberMe, setRememberMe] = useState(true);
 
   // Onde digitali fluide sullo sfondo
-  const waveAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [waveAnim] = useState(() => new Animated.Value(0));
+  const [pulseAnim] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
-    Animated.loop(
+    const waveLoop = Animated.loop(
       Animated.timing(waveAnim, {
         toValue: 1,
         duration: 6000,
         useNativeDriver: true,
-      })
-    ).start();
+      }),
+    );
 
-    Animated.loop(
+    const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
           toValue: 1.05,
@@ -54,9 +54,16 @@ export default function AuthScreen() {
           duration: 1200,
           useNativeDriver: true,
         }),
-      ])
-    ).start();
-  }, []);
+      ]),
+    );
+
+    waveLoop.start();
+    pulseLoop.start();
+    return () => {
+      waveLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [pulseAnim, waveAnim]);
 
   const handleAuthEmail = async () => {
     if (!email || !password) {
@@ -66,14 +73,20 @@ export default function AuthScreen() {
 
     setLoading(true);
     if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
       if (error) Alert.alert("Errore Accesso", error.message);
     } else {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) {
         Alert.alert("Errore Registrazione", error.message);
       } else {
-        Alert.alert("Registrazione completata", "Controlla la tua email per confermare l'account.");
+        Alert.alert(
+          "Registrazione completata",
+          "Controlla la tua email per confermare l'account.",
+        );
       }
     }
     setLoading(false);
@@ -104,11 +117,16 @@ export default function AuthScreen() {
 
       // Gestione specifica per mobile con WebBrowser
       if (Platform.OS !== "web" && data?.url) {
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-        
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectTo,
+        );
+
         if (result.type === "success" && result.url) {
           const urlParams = new URLSearchParams(
-            result.url.includes("#") ? result.url.split("#")[1] : result.url.split("?")[1]
+            result.url.includes("#")
+              ? result.url.split("#")[1]
+              : result.url.split("?")[1],
           );
           const accessToken = urlParams.get("access_token");
           const refreshToken = urlParams.get("refresh_token");
@@ -122,7 +140,10 @@ export default function AuthScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert("Errore Google", error.message || "Impossibile completare l'accesso con Google.");
+      Alert.alert(
+        "Errore Google",
+        error.message || "Impossibile completare l'accesso con Google.",
+      );
     } finally {
       setLoading(false);
     }
@@ -138,8 +159,10 @@ export default function AuthScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <LinearGradient colors={["#020205", "#0A0612", "#020205"]} style={styles.backgroundGradient}>
-        
+      <LinearGradient
+        colors={["#020205", "#0A0612", "#020205"]}
+        style={styles.backgroundGradient}
+      >
         {/* Linee di flusso stile live stream */}
         <Animated.View
           style={[
@@ -150,14 +173,22 @@ export default function AuthScreen() {
         <Animated.View
           style={[
             styles.waveLineBottom,
-            { transform: [{ translateX: Animated.multiply(translateXWave, -1) }] },
+            {
+              transform: [
+                { translateX: Animated.multiply(translateXWave, -1) },
+              ],
+            },
           ]}
         />
 
         <View style={styles.contentContainer}>
-          
           {/* Logo Geometrico Tagliente */}
-          <Animated.View style={[styles.logoContainer, { transform: [{ scale: pulseAnim }] }]}>
+          <Animated.View
+            style={[
+              styles.logoContainer,
+              { transform: [{ scale: pulseAnim }] },
+            ]}
+          >
             <View style={styles.logoOuterFrame}>
               <LinearGradient
                 colors={["#A855F7", "#581C87"]}
@@ -175,7 +206,6 @@ export default function AuthScreen() {
 
           {/* Card Principale Tagliente */}
           <View style={styles.formCard}>
-            
             <View style={styles.cardHeader}>
               <View style={styles.headerSlash} />
               <Text style={styles.cardTitle}>
@@ -209,7 +239,12 @@ export default function AuthScreen() {
                 onPress={() => setRememberMe(!rememberMe)}
                 activeOpacity={0.9}
               >
-                <View style={[styles.checkboxBox, rememberMe && styles.checkboxActive]} />
+                <View
+                  style={[
+                    styles.checkboxBox,
+                    rememberMe && styles.checkboxActive,
+                  ]}
+                />
                 <Text style={styles.checkboxLabel}>Ricordami</Text>
               </TouchableOpacity>
               <TouchableOpacity>
@@ -252,7 +287,12 @@ export default function AuthScreen() {
               disabled={loading}
               activeOpacity={0.8}
             >
-              <Ionicons name="logo-google" size={16} color="#E2E8F0" style={{ marginRight: 10 }} />
+              <Ionicons
+                name="logo-google"
+                size={16}
+                color="#E2E8F0"
+                style={{ marginRight: 10 }}
+              />
               <Text style={styles.googleButtonText}>Continua con Google</Text>
             </TouchableOpacity>
 
@@ -267,7 +307,6 @@ export default function AuthScreen() {
                 </Text>
               </Text>
             </TouchableOpacity>
-
           </View>
         </View>
       </LinearGradient>

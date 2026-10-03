@@ -12,3 +12,4 @@ export function useTheme() {
 
   return Colors[theme];
 }
+

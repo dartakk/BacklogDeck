@@ -1,9 +1,10 @@
-import React, { useState } from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { supabase } from "../services/superbase";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function ScannerScreen() {
+  const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
@@ -29,25 +30,26 @@ export default function ScannerScreen() {
   const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
     if (scanned) return;
     setScanned(true);
-    Alert.alert("Codice Riconosciuto!", `Codice: ${data}`, [
-      { text: "OK", onPress: () => setScanned(false) },
-    ]);
+    router.replace(`/search?barcode=${encodeURIComponent(data)}`);
   };
 
   return (
     <View style={styles.container}>
       <CameraView
-  style={{ flex: 1, width: "100%", height: "100%" }}
-  onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-  barcodeScannerSettings={{
-    barcodeTypes: ["qr", "ean13", "upc_a"],
-  }}
->
+        style={styles.camera}
+        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        barcodeScannerSettings={{
+          barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"],
+        }}
+      >
         <View style={styles.overlay}>
           <Text style={styles.scanTitle}>📷 Scanner Giochi Fisici</Text>
           <View style={styles.viewfinder} />
           {scanned && (
-            <TouchableOpacity style={styles.button} onPress={() => setScanned(false)}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => setScanned(false)}
+            >
               <Text style={styles.buttonText}>Scansiona di nuovo</Text>
             </TouchableOpacity>
           )}
@@ -59,6 +61,7 @@ export default function ScannerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#121214" },
+  camera: { flex: 1, width: "100%" },
   center: {
     flex: 1,
     justifyContent: "center",

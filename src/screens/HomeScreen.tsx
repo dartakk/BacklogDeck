@@ -200,3 +200,4 @@ const styles = StyleSheet.create({
   emptyText: { color: "#F3F0FF", fontSize: 16, fontWeight: "600", textAlign: "center", marginTop: 12, marginBottom: 6 },
   emptySubText: { color: "#8E8A9F", fontSize: 13, textAlign: "center" },
 });
+

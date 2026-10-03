@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  ActivityIndicator,
-  RefreshControl,
-  Linking,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
+import {
+    ActivityIndicator,
+    Image,
+    Linking,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 interface NewsItem {
   id: string;
@@ -28,39 +29,47 @@ interface NewsItem {
 const MOCK_GLOBAL_NEWS: NewsItem[] = [
   {
     id: "1",
-    title: "GTA VI: Rockstar aggiorna la finestra di lancio e mostra nuovi dettagli sul motore grafico",
+    title:
+      "GTA VI: Rockstar aggiorna la finestra di lancio e mostra nuovi dettagli sul motore grafico",
     category: "Annunci",
     source: "IGN Global",
     time: "1 ora fa",
-    image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=800&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=800&auto=format&fit=crop",
     url: "https://ign.com",
     isHot: true,
   },
   {
     id: "2",
-    title: "PlayStation 5 Pro e PSSR: l'analisi tecnica sui giochi a 60 FPS e 4K nativi",
+    title:
+      "PlayStation 5 Pro e PSSR: l'analisi tecnica sui giochi a 60 FPS e 4K nativi",
     category: "Hardware",
     source: "Digital Foundry",
     time: "3 ore fa",
-    image: "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?q=80&w=600&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?q=80&w=600&auto=format&fit=crop",
     url: "https://eurogamer.net",
   },
   {
     id: "3",
-    title: "Nintendo Switch 2: le ultime indiscrezioni su retrocompatibilità e schermo OLED",
+    title:
+      "Nintendo Switch 2: le ultime indiscrezioni su retrocompatibilità e schermo OLED",
     category: "Rumor",
     source: "Eurogamer",
     time: "5 ore fa",
-    image: "https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?q=80&w=600&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?q=80&w=600&auto=format&fit=crop",
     url: "https://eurogamer.net",
   },
   {
     id: "4",
-    title: "Xbox Game Pass: annunciati i 6 nuovi titoli in arrivo questa settimana",
+    title:
+      "Xbox Game Pass: annunciati i 6 nuovi titoli in arrivo questa settimana",
     category: "Servizi",
     source: "GameSpot",
     time: "8 ore fa",
-    image: "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=600&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1621252179027-94459d278660?q=80&w=600&auto=format&fit=crop",
     url: "https://gamespot.com",
   },
 ];
@@ -73,18 +82,19 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("Tutti");
 
-  const fetchNews = async () => {
+  const fetchNews = useCallback(async () => {
     setLoading(true);
     // In futuro qui collegheremo la chiamata RSS/API
-    setTimeout(() => {
-      setNews(MOCK_GLOBAL_NEWS);
-      setLoading(false);
-    }, 600);
-  };
-
-  useEffect(() => {
-    fetchNews();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setNews(MOCK_GLOBAL_NEWS);
+    setLoading(false);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchNews();
+    }, [fetchNews]),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -116,7 +126,11 @@ export default function NewsScreen() {
       style={styles.container}
       showsVerticalScrollIndicator={false}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#A855F7" />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#A855F7"
+        />
       }
     >
       {/* Header */}
@@ -137,13 +151,21 @@ export default function NewsScreen() {
           style={styles.featuredCard}
           onPress={() => openArticle(hotArticle.url)}
         >
-          <Image source={{ uri: hotArticle.image }} style={styles.featuredImage} />
+          <Image
+            source={{ uri: hotArticle.image }}
+            style={styles.featuredImage}
+          />
           <LinearGradient
             colors={["transparent", "rgba(13, 11, 20, 0.95)"]}
             style={styles.gradientOverlay}
           >
             <View style={styles.hotBadge}>
-              <Ionicons name="flame" size={12} color="#FFF" style={{ marginRight: 4 }} />
+              <Ionicons
+                name="flame"
+                size={12}
+                color="#FFF"
+                style={{ marginRight: 4 }}
+              />
               <Text style={styles.hotBadgeText}>HOT TOPIC</Text>
             </View>
             <Text style={styles.featuredTitle}>{hotArticle.title}</Text>
@@ -157,7 +179,11 @@ export default function NewsScreen() {
       )}
 
       {/* Filtri Categoria */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterWrapper}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterWrapper}
+      >
         {CATEGORIES.map((cat) => (
           <TouchableOpacity
             key={cat}
@@ -211,31 +237,119 @@ export default function NewsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0D0B14", paddingTop: 50, paddingHorizontal: 16 },
-  loadingContainer: { flex: 1, backgroundColor: "#0D0B14", justifyContent: "center", alignItems: "center" },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  brandSubtitle: { color: "#A855F7", fontSize: 12, fontWeight: "bold", letterSpacing: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: "#0D0B14",
+    paddingTop: 50,
+    paddingHorizontal: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#0D0B14",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  brandSubtitle: {
+    color: "#A855F7",
+    fontSize: 12,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
   headerTitle: { fontSize: 26, fontWeight: "bold", color: "#F3F0FF" },
-  iconBtn: { backgroundColor: "#171324", padding: 10, borderRadius: 12, borderWidth: 1, borderColor: "#2A233D" },
-  featuredCard: { height: 220, borderRadius: 20, overflow: "hidden", marginBottom: 20, borderWidth: 1, borderColor: "#2A233D" },
+  iconBtn: {
+    backgroundColor: "#171324",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A233D",
+  },
+  featuredCard: {
+    height: 220,
+    borderRadius: 20,
+    overflow: "hidden",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#2A233D",
+  },
   featuredImage: { width: "100%", height: "100%" },
-  gradientOverlay: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, justifyContent: "flex-end" },
-  hotBadge: { flexDirection: "row", alignItems: "center", backgroundColor: "#EF4444", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: "flex-start", marginBottom: 8 },
+  gradientOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    justifyContent: "flex-end",
+  },
+  hotBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EF4444",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
   hotBadgeText: { color: "#FFF", fontSize: 10, fontWeight: "bold" },
-  featuredTitle: { color: "#FFF", fontSize: 16, fontWeight: "bold", marginBottom: 6, lineHeight: 22 },
+  featuredTitle: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 6,
+    lineHeight: 22,
+  },
   metaRow: { flexDirection: "row", alignItems: "center" },
   sourceText: { color: "#A855F7", fontSize: 12, fontWeight: "600" },
   dot: { color: "#8E8A9F", marginHorizontal: 6 },
   timeText: { color: "#8E8A9F", fontSize: 12 },
   filterWrapper: { maxHeight: 40, marginBottom: 20 },
-  filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: "#171324", marginRight: 8, borderWidth: 1, borderColor: "#2A233D" },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#171324",
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#2A233D",
+  },
   activeFilterChip: { backgroundColor: "#A855F7", borderColor: "#A855F7" },
   filterText: { color: "#8E8A9F", fontSize: 13, fontWeight: "600" },
   activeFilterText: { color: "#FFF" },
-  sectionTitle: { fontSize: 18, fontWeight: "bold", color: "#F3F0FF", marginBottom: 14 },
-  newsCard: { flexDirection: "row", backgroundColor: "#171324", borderRadius: 16, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: "#2A233D", alignItems: "center" },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#F3F0FF",
+    marginBottom: 14,
+  },
+  newsCard: {
+    flexDirection: "row",
+    backgroundColor: "#171324",
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#2A233D",
+    alignItems: "center",
+  },
   newsImage: { width: 85, height: 85, borderRadius: 12, marginRight: 12 },
   newsContent: { flex: 1 },
-  categoryTag: { color: "#A855F7", fontSize: 11, fontWeight: "bold", marginBottom: 4 },
-  newsTitle: { color: "#F3F0FF", fontSize: 14, fontWeight: "600", marginBottom: 6, lineHeight: 18 },
+  categoryTag: {
+    color: "#A855F7",
+    fontSize: 11,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  newsTitle: {
+    color: "#F3F0FF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 6,
+    lineHeight: 18,
+  },
 });

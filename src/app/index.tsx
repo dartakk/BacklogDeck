@@ -1,17 +1,20 @@
-import { Settings } from "lucide-react-native";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { Search } from "lucide-react-native";
+import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Image,
+    Linking,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AnimatedBackdrop from "../components/AnimatedBackdrop";
+import { supabase } from "../services/superbase";
 
 // Interfaccia per la struttura dati della notizia
 interface NewsItem {
@@ -22,79 +25,56 @@ interface NewsItem {
   time: string;
   imageUrl: string;
   url: string;
-  isHotTopic?: boolean;
 }
 
-// Categorie disponibili
-const CATEGORIES = ["Tutti", "Hardware", "Annunci", "Rumor"];
-
-// Dati di fallback per test immediato
-const MOCK_NEWS: NewsItem[] = [
-  {
-    id: "1",
-    title:
-      "GTA VI: Rockstar aggiorna la finestra di lancio e mostra nuovi dettagli sul motore grafico",
-    source: "IGN Global",
-    category: "Annunci",
-    time: "1 ora fa",
-    imageUrl:
-      "https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&q=80&w=1000",
-    url: "https://ign.com",
-    isHotTopic: true,
-  },
-  {
-    id: "2",
-    title:
-      "PlayStation 5 Pro e PSSR: l'analisi tecnica sui giochi a 60 FPS e 4K nativi",
-    source: "Digital Foundry",
-    category: "Hardware",
-    time: "3 ore fa",
-    imageUrl:
-      "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&q=80&w=600",
-    url: "https://digitalfoundry.net",
-  },
-  {
-    id: "3",
-    title:
-      "Nintendo Switch 2: le ultime indiscrezioni su retrocompatibilità e componenti",
-    source: "Eurogamer",
-    category: "Rumor",
-    time: "5 ore fa",
-    imageUrl:
-      "https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?auto=format&fit=crop&q=80&w=600",
-    url: "https://eurogamer.net",
-  },
-];
+const CATEGORIES = ["Tutti", "News", "Hardware", "Annunci", "Rumor"];
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState("Tutti");
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Simulazione fetch notizie (in futuro qui chiameremo un endpoint Supabase o Feed RSS)
-  const fetchNews = async () => {
+  const fetchNews = useCallback(async () => {
     try {
-      setLoading(true);
-      // Simuliamo il ritardo di rete
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      setNews(MOCK_NEWS);
+      const { data, error } = await supabase.functions.invoke("gaming-news");
+      if (error) throw error;
+      const items = data?.items;
+      if (!Array.isArray(items))
+        throw new Error("Il feed non ha restituito notizie.");
+
+      setNews(items as NewsItem[]);
+      setErrorMessage(null);
     } catch (error) {
       console.error("Errore recupero news:", error);
+      setErrorMessage(
+        "Le notizie non sono al momento disponibili. Riprova tra poco.",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    fetchNews();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchNews();
+    }, [fetchNews]),
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchNews();
+    void fetchNews();
+  };
+
+  const formatNewsDate = (dateValue: string) => {
+    return new Intl.DateTimeFormat("it-IT", {
+      day: "numeric",
+      month: "short",
+    }).format(new Date(dateValue));
   };
 
   // Filtra le news in base alla categoria selezionata
@@ -106,7 +86,7 @@ export default function HomeScreen() {
             item.category.toLowerCase() === selectedCategory.toLowerCase(),
         );
 
-  const hotTopic = news.find((item) => item.isHotTopic) || news[0];
+  const hotTopic = news[0];
   const latestNews = filteredNews.filter((item) => item.id !== hotTopic?.id);
 
   const openNewsUrl = (url: string) => {
@@ -119,14 +99,20 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <AnimatedBackdrop />
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.subHeader}>WORLDWIDE GAMING</Text>
-          <Text style={styles.headerTitle}>Global News</Text>
+          <Text style={styles.subHeader}>BACKLOGDECK · RADAR</Text>
+          <Text style={styles.headerTitle}>Notizie gaming</Text>
         </View>
-        <TouchableOpacity style={styles.settingsButton}>
-          <Settings size={22} color="#FFFFFF" />
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => router.push("/search")}
+          accessibilityRole="button"
+          accessibilityLabel="Cerca giochi"
+        >
+          <Search size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -153,13 +139,13 @@ export default function HomeScreen() {
             />
             <View style={styles.hotTopicOverlay}>
               <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>HOT TOPIC</Text>
+                <Text style={styles.badgeText}>IN EVIDENZA</Text>
               </View>
               <Text style={styles.hotTopicTitle} numberOfLines={3}>
                 {hotTopic.title}
               </Text>
               <Text style={styles.hotTopicMeta}>
-                {hotTopic.source} • {hotTopic.time}
+                {hotTopic.source} • {formatNewsDate(hotTopic.time)}
               </Text>
             </View>
           </TouchableOpacity>
@@ -206,6 +192,17 @@ export default function HomeScreen() {
             color="#A855F7"
             style={{ marginTop: 20 }}
           />
+        ) : errorMessage && news.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>Feed non disponibile</Text>
+            <Text style={styles.emptyMessage}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => void fetchNews()}
+            >
+              <Text style={styles.retryText}>Riprova</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           latestNews.map((item) => (
             <TouchableOpacity
@@ -221,11 +218,14 @@ export default function HomeScreen() {
                   {item.title}
                 </Text>
                 <Text style={styles.newsMeta}>
-                  {item.source} • {item.time}
+                  {item.source} • {formatNewsDate(item.time)}
                 </Text>
               </View>
             </TouchableOpacity>
           ))
+        )}
+        {!!errorMessage && news.length > 0 && (
+          <Text style={styles.inlineError}>{errorMessage}</Text>
         )}
       </ScrollView>
     </View>
@@ -376,4 +376,26 @@ const styles = StyleSheet.create({
     color: "#6B7280",
     fontSize: 11,
   },
+  emptyState: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 36,
+  },
+  emptyTitle: { color: "#F3F0FF", fontSize: 17, fontWeight: "700" },
+  emptyMessage: {
+    color: "#A9A1B8",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: "#7C3AED",
+    borderRadius: 8,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  retryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  inlineError: { color: "#FCA5A5", fontSize: 12, marginBottom: 14 },
 });

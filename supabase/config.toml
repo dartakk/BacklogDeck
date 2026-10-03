@@ -1,0 +1,7 @@
+project_id = "backlogdeck"
+
+[functions.steam-connect]
+verify_jwt = false
+
+[functions.gaming-news]
+verify_jwt = false

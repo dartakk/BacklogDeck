@@ -1,7 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
-import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createClient } from "@supabase/supabase-js";
 import { Platform } from "react-native";
+import "react-native-url-polyfill/auto";
 import { RAWGGame } from "./rawg";
 
 const supabaseUrl = "https://npkzojijhljgnvmopfxz.supabase.co";
@@ -17,7 +17,7 @@ const SafeStorage = {
         if (typeof window !== "undefined" && window.localStorage) {
           return Promise.resolve(window.localStorage.getItem(key));
         }
-      } catch (e) {}
+      } catch {}
       return Promise.resolve(memoryStorage[key] || null);
     }
     return AsyncStorage.getItem(key);
@@ -29,7 +29,7 @@ const SafeStorage = {
           window.localStorage.setItem(key, value);
           return Promise.resolve();
         }
-      } catch (e) {}
+      } catch {}
       memoryStorage[key] = value;
       return Promise.resolve();
     }
@@ -42,7 +42,7 @@ const SafeStorage = {
           window.localStorage.removeItem(key);
           return Promise.resolve();
         }
-      } catch (e) {}
+      } catch {}
       delete memoryStorage[key];
       return Promise.resolve();
     }
@@ -62,7 +62,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export const addGameToUserLibrary = async (
   userId: string,
   game: RAWGGame,
-  status: "backlog" | "playing" | "completed" | "dropped" = "backlog"
+  status: "backlog" | "playing" | "completed" | "dropped" = "backlog",
 ) => {
   try {
     // 0. Assicuriamoci che esista un profilo per questo utente per evitare errori di foreign key
@@ -92,6 +92,8 @@ export const addGameToUserLibrary = async (
         title: game.name,
         cover_url: game.background_image,
         release_date: game.released,
+        platforms: game.platforms?.map((item) => item.platform.name) ?? [],
+        genres: game.genres?.map((genre) => genre.name) ?? [],
       });
     } else {
       await supabase
@@ -100,6 +102,8 @@ export const addGameToUserLibrary = async (
           title: game.name,
           cover_url: game.background_image,
           release_date: game.released,
+          platforms: game.platforms?.map((item) => item.platform.name) ?? [],
+          genres: game.genres?.map((genre) => genre.name) ?? [],
         })
         .eq("id", game.id);
     }
@@ -152,7 +156,7 @@ export const addGameToLibrary = async (
   title: string,
   coverUrl: string,
   released: string,
-  status: "backlog" | "playing" | "completed" | "dropped" = "backlog"
+  status: "backlog" | "playing" | "completed" | "dropped" = "backlog",
 ) => {
   const fakeGameObj: RAWGGame = {
     id: gameId,
@@ -175,27 +179,31 @@ export const getUserLibrary = async (userId: string) => {
       id,
       status,
       game_id,
-      games (
+      rating,
+      notes,
+      session_minutes,
+      games:game_id (
         id,
         title,
         cover_url,
-        release_date
+        release_date,
+        genres
       )
-    `
+    `,
     )
     .eq("user_id", userId);
 
   if (error) {
     console.error("Errore nel recupero libreria:", error);
-    return [];
+    throw error;
   }
 
-  return data || [];
+  return data ?? [];
 };
 
 export const updateGameStatus = async (
   libraryItemId: string,
-  newStatus: "backlog" | "playing" | "completed" | "dropped"
+  newStatus: "backlog" | "playing" | "completed" | "dropped",
 ) => {
   const { error } = await supabase
     .from("user_library")
@@ -224,12 +232,19 @@ export const removeGameFromLibrary = async (libraryItemId: string) => {
 
 export const updateGameDetails = async (
   id: string,
-  rating: number,
-  notes: string
+  rating: number | null,
+  notes: string,
+  sessionMinutes?: number | null,
 ) => {
   const { error } = await supabase
     .from("user_library")
-    .update({ rating, notes })
+    .update({
+      rating,
+      notes,
+      ...(sessionMinutes !== undefined
+        ? { session_minutes: sessionMinutes }
+        : {}),
+    })
     .eq("id", id);
 
   if (error) {

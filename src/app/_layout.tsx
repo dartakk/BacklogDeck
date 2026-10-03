@@ -1,5 +1,12 @@
 import { Tabs } from "expo-router";
-import { Dices, Library, Newspaper, Search, User, Users } from "lucide-react-native";
+import {
+    Dices,
+    Library,
+    Newspaper,
+    Search,
+    User,
+    Users,
+} from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -37,7 +44,7 @@ export default function Layout() {
           setSession(currentSession);
           setLoading(false);
         }
-      }
+      },
     );
 
     return () => {
@@ -200,6 +207,13 @@ export default function Layout() {
       />
       <Tabs.Screen
         name="game/[id]"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="steam/callback"
         options={{
           href: null,
           tabBarStyle: { display: "none" },

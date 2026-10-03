@@ -8,3 +8,4 @@ export default function GameDetailRoute() {
   // @ts-ignore
   return <GameDetailScreen id={gameId} gameId={gameId} />;
 }
+

@@ -8,7 +8,30 @@ export interface RAWGGame {
   background_image: string;
   metacritic: number;
   platforms: { platform: { id: number; name: string } }[];
+  genres?: { id: number; name: string }[];
 }
+
+export const lookupGameTitleByBarcode = async (
+  barcode: string,
+): Promise<string | null> => {
+  const normalizedBarcode = barcode.replace(/\D/g, "");
+  if (!/^\d{8,14}$/.test(normalizedBarcode)) {
+    throw new Error("Il codice scansionato non è un barcode EAN/UPC valido.");
+  }
+
+  const response = await fetch(
+    `https://api.upcitemdb.com/prod/trial/lookup?upc=${normalizedBarcode}`,
+  );
+  if (!response.ok) {
+    throw new Error("La ricerca barcode è momentaneamente non disponibile.");
+  }
+
+  const result = await response.json();
+  const title = result.items?.find(
+    (item: { title?: string }) => item.title,
+  )?.title;
+  return typeof title === "string" ? title : null;
+};
 
 export const searchGames = async (query: string): Promise<RAWGGame[]> => {
   try {

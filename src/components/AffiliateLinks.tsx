@@ -1,22 +1,29 @@
-import React from "react";
-import { StyleSheet, Text, View, TouchableOpacity, Linking } from "react-native";
+import {
+    Linking,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 interface AffiliateLinksProps {
   gameTitle: string;
-  asinOrId?: string;
 }
 
-export default function AffiliateLinks({ gameTitle, asinOrId }: AffiliateLinksProps) {
+export default function AffiliateLinks({ gameTitle }: AffiliateLinksProps) {
   const openAffiliateLink = async (store: string) => {
     let url = "";
     const encodedTitle = encodeURIComponent(gameTitle);
+    const amazonTag = process.env.EXPO_PUBLIC_AMAZON_ASSOCIATES_TAG?.trim();
 
     switch (store) {
       case "amazon":
-        url = "https://www.amazon.it/s?k=" + encodedTitle + "&tag=tuotag-21";
+        url = `https://www.amazon.it/s?k=${encodedTitle}`;
+        if (amazonTag) url += `&tag=${encodeURIComponent(amazonTag)}`;
         break;
       case "instant-gaming":
-        url = "https://www.instant-gaming.com/it/ricerca/?query=" + encodedTitle;
+        url =
+          "https://www.instant-gaming.com/it/ricerca/?query=" + encodedTitle;
         break;
       case "steam":
         url = "https://store.steampowered.com/search/?term=" + encodedTitle;
@@ -36,18 +43,29 @@ export default function AffiliateLinks({ gameTitle, asinOrId }: AffiliateLinksPr
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🛒 Trova il gioco al miglior prezzo</Text>
-      <Text style={styles.subtitle}>Acquista tramite i link partner per supportare la community.</Text>
+      <Text style={styles.subtitle}>
+        Confronta disponibilità e acquista dal tuo store preferito.
+      </Text>
 
       <View style={styles.buttonRow}>
-        <TouchableOpacity style={[styles.storeButton, styles.amazon]} onPress={() => openAffiliateLink("amazon")}>
+        <TouchableOpacity
+          style={[styles.storeButton, styles.amazon]}
+          onPress={() => openAffiliateLink("amazon")}
+        >
           <Text style={styles.buttonText}>Amazon</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.storeButton, styles.instantGaming]} onPress={() => openAffiliateLink("instant-gaming")}>
+        <TouchableOpacity
+          style={[styles.storeButton, styles.instantGaming]}
+          onPress={() => openAffiliateLink("instant-gaming")}
+        >
           <Text style={styles.buttonText}>Instant Gaming</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.storeButton, styles.steam]} onPress={() => openAffiliateLink("steam")}>
+        <TouchableOpacity
+          style={[styles.storeButton, styles.steam]}
+          onPress={() => openAffiliateLink("steam")}
+        >
           <Text style={styles.buttonText}>Steam</Text>
         </TouchableOpacity>
       </View>
